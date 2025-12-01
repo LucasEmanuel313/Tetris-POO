@@ -1,0 +1,184 @@
+\documentclass[a4paper,11pt]{article}
+
+% ----------------- Pacotes básicos -----------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{setspace}
+\onehalfspacing
+
+% ----------------- TikZ -----------------
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit}
+
+% ----------------- Outros -----------------
+\usepackage{hyperref}
+
+\title{Projet Tetris multijoueur\\\large Analyse des cas d'utilisation}
+\author{Équipe du projet}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Ce document présente les principaux cas d'utilisation du système
+\emph{Tetris multijoueur} développé dans le cadre du cours de
+programmation orientée objet. L'objectif est de décrire, du point de
+vue de l'utilisateur, les fonctionnalités offertes par le système et
+les interactions avec les acteurs principaux.
+
+\section{Acteurs}
+
+Les acteurs identifiés sont les suivants :
+
+\begin{itemize}
+  \item \textbf{Joueur} : utilisateur humain du système. Il peut jouer
+        en mode solo ou multijoueur, créer ou rejoindre des salles,
+        et consulter les résultats d'une partie.
+  \item \textbf{Serveur de parties} : composant logiciel chargé de
+        gérer les salles multijoueurs, la synchronisation des
+        parties et la communication entre les différents joueurs.
+\end{itemize}
+
+\section{Cas d'utilisation}
+
+\begin{description}
+
+  \item[UC1 -- Démarrer une partie solo]%
+  \hfill\\
+  \textbf{Acteur principal :} Joueur.\\
+  Le joueur démarre une nouvelle partie de Tetris en mode solo. Le système
+  initialise le plateau, la file de pièces et le score, puis passe à l'état
+  \og partie en cours \fg.
+
+  \item[UC2 -- Jouer en solo]%
+  \hfill\\
+  \textbf{Acteur principal :} Joueur.\\
+  Le joueur contrôle les pièces (déplacement, rotation, chute rapide) pendant que
+  le système fait tomber automatiquement la pièce courante, détecte les lignes
+  complètes, met à jour le score et termine la partie en cas de \emph{game over}.
+
+  \item[UC3 -- Créer une salle multijoueur]%
+  \hfill\\
+  \textbf{Acteurs principaux :} Joueur (hôte), Serveur de parties.\\
+  Le joueur crée une nouvelle salle multijoueur (nom, nombre de joueurs, type de
+  partie). Le serveur enregistre la salle et la rend visible pour les autres
+  joueurs qui souhaitent la rejoindre.
+
+  \item[UC4 -- Rejoindre une salle]%
+  \hfill\\
+  \textbf{Acteurs principaux :} Joueur, Serveur de parties.\\
+  Le joueur consulte la liste des salles disponibles et demande à rejoindre une
+  salle choisie. Le serveur vérifie les conditions (place disponible, partie
+  non démarrée) et accepte ou refuse la demande.
+
+  \item[UC5 -- Lancer la partie multijoueur]%
+  \hfill\\
+  \textbf{Acteurs principaux :} Joueur (hôte), Serveur de parties.\\
+  L'hôte déclenche le début de la partie lorsque les joueurs requis sont
+  présents. Le serveur notifie tous les clients et initialise un plateau pour
+  chaque joueur, en passant la salle à l'état \og partie en cours \fg.
+
+  \item[UC6 -- Jouer une partie multijoueur]%
+  \hfill\\
+  \textbf{Acteurs principaux :} Joueurs, Serveur de parties.\\
+  Chaque joueur joue sa propre instance de Tetris. Lorsqu'un joueur efface des
+  lignes, le client envoie un événement au serveur, qui calcule et distribue
+  les effets (par exemple, lignes \og poubelle \fg) aux autres joueurs. La partie
+  se termine lorsqu'il ne reste qu'un joueur actif ou lorsqu'une condition de fin
+  prédéfinie est atteinte.
+
+  \item[UC7 -- Voir les résultats de la partie]%
+  \hfill\\
+  \textbf{Acteur principal :} Joueur.\\
+  À la fin d'une partie (solo ou multijoueur), le système affiche les
+  résultats : score, nombre de lignes effacées, classement des joueurs, etc.
+  Le joueur peut ensuite revenir au menu principal ou lancer une nouvelle
+  partie.
+
+\end{description}
+
+\section{Diagramme de cas d'utilisation}
+
+La figure~\ref{fig:usecase} présente une vue synthétique des cas
+d'utilisation précédemment décrits.
+
+\begin{figure}[h]
+  \centering
+  \begin{tikzpicture}[
+    actor/.style   ={draw, rectangle, rounded corners, align=center,
+                     minimum width=2.3cm, minimum height=0.9cm},
+    usecase/.style ={draw, ellipse, align=center,
+                     minimum width=3.8cm, minimum height=1.1cm},
+    sysbox/.style  ={draw, rectangle, rounded corners,
+                     inner sep=0.6cm}
+  ]
+
+    % ---------- Acteurs ----------
+    \node[actor] (joueur)  at (-2,0) {Joueur};
+    \node[actor] (serveur) at (10,0) {Serveur\\de parties};
+
+    % ---------- Cas d'utilisation ----------
+    % Mode solo (à gauche)
+    \node[usecase] (startsolo) at (0,-2.5) {Démarrer une\\partie solo};
+    % ligeiramente deslocado em x para que o include fique diagonal
+    \node[usecase] (playsolo)  at (1.8,-4.7) {Jouer en solo};
+
+    % Mode multijoueur (coluna à direita)
+    \node[usecase] (createroom) at (7,-2.0) {Créer une salle\\multijoueur};
+    \node[usecase] (joinroom)   at (7,-4.0) {Rejoindre une salle};
+    \node[usecase] (startmp)    at (7,-6.0) {Lancer la partie\\multijoueur};
+    \node[usecase] (playmp)     at (7,-8.0) {Jouer une partie\\multijoueur};
+    \node[usecase] (results)    at (7,-10.0){Voir les résultats\\de la partie};
+
+    % ---------- Boîte du système ----------
+    \node[sysbox,
+          fit=(startsolo) (playsolo) (createroom) (joinroom)
+              (startmp) (playmp) (results),
+          label=above:{Système : Tetris multijoueur}] (system) {};
+
+    % ---------- Associations (sem sobreposição) ----------
+    % Joueur
+    \draw[-] (joueur.south) -- ++(0,-0.6) |- (startsolo.west);
+    \draw[-] (joueur.south) -- ++(0,-0.6) |- (createroom.west);
+    \draw[-] (joueur.south) -- ++(0,-0.6) |- (joinroom.west);
+    \draw[-] (joueur.south) -- ++(0,-0.6) |- (results.west);
+
+    % Serveur
+    \draw[-] (serveur.south) -- ++(0,-0.6) |- (createroom.east);
+    \draw[-] (serveur.south) -- ++(0,-0.6) |- (joinroom.east);
+    \draw[-] (serveur.south) -- ++(0,-0.6) |- (startmp.east);
+    \draw[-] (serveur.south) -- ++(0,-0.6) |- (playmp.east);
+
+    % ---------- Relações <<include>> (não sobrepostas) ----------
+    % diagonal leve entre os nós para o texto não ficar em pé
+    \draw[dashed, -{Stealth[length=4pt]}]
+      (startsolo.south east) ..
+      controls +(0.5,-0.2) and +(-0.5,0.2) ..
+      node[above,sloped]{\scriptsize <<include>>}
+      (playsolo.north west);
+
+    \draw[dashed, -{Stealth[length=4pt]}]
+      (startmp.south) ..
+      controls +(0,-0.7) and +(0,0.7) ..
+      node[right]{\scriptsize <<include>>}
+      (playmp.north);
+
+    \draw[dashed, -{Stealth[length=4pt]}]
+      (playmp.south) ..
+      controls +(0,-0.7) and +(0,0.7) ..
+      node[right]{\scriptsize <<include>>}
+      (results.north);
+
+  \end{tikzpicture}
+  \caption{Diagramme de cas d'utilisation du système Tetris multijoueur.}
+  \label{fig:usecase}
+\end{figure}
+
+\end{document}
