@@ -8,17 +8,10 @@
 #include "table.h"
 
 int main(){
-    const char initial_piece[4][4] = {
-        {' ', ' ', ' ', '#'},
-        {' ', ' ', ' ', '#'},
-        {' ', ' ', ' ', '#'},
-        {' ', ' ', ' ', '#'}
-    };
     char button_pressed;
-    block b(initial_piece);
-    block* ptr = &b;
     table ta;
-    ta.add_block(ptr);
+    //ta.make_profile_table();
+    ta.add_block();
     ta.print_table();
     while(true){
         button_pressed = _getch();
@@ -43,7 +36,7 @@ int main(){
         }
         system("CLS");
         ta.print_table();
-
+        ta.make_profile_table();
     }
 
     return 0;
