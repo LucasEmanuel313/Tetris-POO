@@ -42,7 +42,7 @@ public:
         }
         std::cout<<"-------------------------------\n";
     }
-    void make_profile(){
+    void make_profile_table(){
         for(int i=0; i<10; i++){
             profile[i]=0;
             for(int j=21; j>=0 && profile[i]==0; j--){
@@ -55,6 +55,7 @@ public:
         for(int i=0; i<10; i++){
             std::cout<<"Column "<<i<<" height: "<<profile[i]<<std::endl;
         }
+        current_block->make_profile();
     }
     void update_table(){
         for(int i=0; i<4; i++){
@@ -70,8 +71,9 @@ public:
             }
         }
     }
-    void add_block(block *p){ 
-        current_block = p;
+    void add_block(){ 
+        block* ptr = new block();
+        current_block = ptr;
         block_x_pos = 3;
         block_y_pos = 18;
         update_table();
@@ -88,21 +90,22 @@ public:
     }
     void block_left(){
         block_clear();
-        block_x_pos -= 1;
+        if(block_x_pos > 0){
+            block_x_pos -= 1;
+        }
         update_table();
     }
-
     void block_right(){
         block_clear();
         block_x_pos += 1;
         update_table();
     }
-
     void block_drop(){
-        
         block_clear();
         block_y_pos = 0;
         update_table();
+        delete current_block;
+        add_block();
     }
     table(){
         for (int i = 0; i < 10; i++) {
