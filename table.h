@@ -79,6 +79,27 @@ private:
         current_block = nullptr;
         add_block();
     }
+    bool gameOver = false;
+
+    bool collides_here() const {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                if (current_block->piece[i][j] == '#') {
+                    int x = block_x_pos + i;
+                    int y = block_y_pos + j;
+
+                    // se sair dos limites, é game over também (spawn inválido)
+                    if (x < 0 || x >= 10 || y < 0 || y >= 22) return true;
+
+                    // colisão com bloco já fixado
+                    if (positions[x][y] == '#') return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    
 
 public:
     table() {
@@ -105,6 +126,8 @@ public:
         std::cout << "-------------------------------\n";
         std::cout << "Score: " << score << "\n";
     }
+
+    
 
     void update_table() {
         for (int i = 0; i < 4; ++i) {
@@ -211,6 +234,9 @@ public:
         }
         handle_landing();
     }
+
+    bool is_game_over() const { return gameOver; }
+
 
     // --- Multiplayer hook: recebe lixo do servidor ---
     void apply_garbage(int n) {
