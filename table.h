@@ -6,6 +6,7 @@
 
 #include "block.h"
 #include <iostream>
+#include <SFML/Graphics.hpp>
 
 class table {
 
@@ -119,6 +120,16 @@ private:
 
 public:
 
+   // Retorna o que existe em uma posição específica para a classe gráfica ler
+    char get_cell(int x, int y) const {
+        if (x >= 0 && x < 10 && y >= 0 && y < 22) {
+            return positions[x][y];
+        }
+        return ' ';
+    }
+
+    int get_score() const { return score; }
+
     void print_table() {
         for (int i = 21; i >= 0; --i) {
             for (int j = 0; j < 10; ++j) {
@@ -229,6 +240,10 @@ public:
         }
         // pousou
         handle_landing();
+    }
+
+    table* get_table_pointer() {
+        return this;
     }
 
     table() {
