@@ -1,6 +1,8 @@
 #include <cstddef>
 #include <cstdlib> // Para rand() e srand()
 #include <ctime>   // Para time()
+#include <iostream>
+
 
 #ifndef BLOCK_H
 #define BLOCK_H
@@ -60,7 +62,7 @@ const char PIECE_Z[4][4] = {
     {' ', ' ', ' ', ' '}
 };
 
-const char (*TETROMINOES[])[4][4] = {
+static const char (*TETROMINOES[])[4][4] = {
     &PIECE_I,
     &PIECE_J,
     &PIECE_L,
@@ -133,5 +135,7 @@ class block {
             }
         }
 };
+
+
 
 #endif //BLOCK_H

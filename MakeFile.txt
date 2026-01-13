@@ -1,0 +1,53 @@
+# ========= Config =========
+CXX      := g++
+CXXFLAGS := -std=c++17 -O2 -Wall -Wextra
+LDLIBS   := -lws2_32
+
+# Ajuste esses nomes conforme seus arquivos
+GAME_SRC   := main.cpp table.cpp
+SERVER_SRC := server.cpp
+# Exemplo alternativo:
+# SERVER_SRC := server/server.cpp
+
+BUILD_DIR := build
+
+GAME_EXE   := game.exe
+SERVER_EXE := server.exe
+
+# ========= Auto rules =========
+GAME_OBJ   := $(addprefix $(BUILD_DIR)/,$(notdir $(GAME_SRC:.cpp=.o)))
+SERVER_OBJ := $(addprefix $(BUILD_DIR)/,$(notdir $(SERVER_SRC:.cpp=.o)))
+
+.PHONY: all clean run-server run-game
+
+all: $(GAME_EXE) $(SERVER_EXE)
+
+# Cria pasta build se não existir
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
+# Link do jogo
+$(GAME_EXE): $(BUILD_DIR) $(GAME_OBJ)
+	$(CXX) $(CXXFLAGS) $(GAME_OBJ) -o $@ $(LDLIBS)
+
+# Link do servidor
+$(SERVER_EXE): $(BUILD_DIR) $(SERVER_OBJ)
+	$(CXX) $(CXXFLAGS) $(SERVER_OBJ) -o $@ $(LDLIBS)
+
+# Compile objects (coloca .o em build/)
+$(BUILD_DIR)/%.o: %.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Se o server.cpp estiver em subpasta (ex: server/server.cpp),
+# esta regra permite compilar mesmo assim.
+$(BUILD_DIR)/%.o: server/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+clean:
+	@rm -rf $(BUILD_DIR) *.exe
+
+run-server: $(SERVER_EXE)
+	./$(SERVER_EXE)
+
+run-game: $(GAME_EXE)
+	./$(GAME_EXE) 127.0.0.1 5555
