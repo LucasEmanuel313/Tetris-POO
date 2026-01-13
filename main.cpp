@@ -1,65 +1,57 @@
-//
-// Created by lucas on 21/11/2025.
-//
 #include <iostream>
-#include <stdlib.h>
-#include <conio.h>
 #include <chrono>
-#include <windows.h>   // para Sleep()
+#include <SFML/Graphics.hpp>
 
 #include "block.h"
 #include "table.h"
+#include "Game.h"
+
+#define WINDOW_WIDTH 1200
+#define WINDOW_HEIGHT 800
+#define NEXT_BLOCK_MENU_WIDTH 200
+#define NEXT_BLOCK_MENU_HEIGHT 200
+#define GRID_COLS 10
+#define GRID_ROWS 22
+#define GRID_POS_X 300
+#define GRID_POS_Y 50
+#define BLOCK_SIZE 30.f
 
 int main() {
     using clock = std::chrono::steady_clock;
 
+    // 1. Inicialização da Janela e Lógica do Jogo
+    
     table ta;
     ta.add_block();
-    ta.print_table();
 
+    Game game(&ta);
+
+    // 2. Configuração do Grid Gráfico (do Test_Graphic)
+    sf::RenderWindow& window = game.getWindow();
     auto lastFall = clock::now();
-    std::chrono::milliseconds fallInterval(500); // 0,5 s por queda
+    std::chrono::milliseconds fallInterval(500);
 
-    while (true) {
+    // 3. Game Loop Principal
+    while (window.isOpen()) {
+        
+        // --- A) PROCESSAMENTO DE EVENTOS ---
+        game.HandleEvents();
 
-        // 1) Input não bloqueante
-        if (_kbhit()) {
-            char button_pressed = _getch();
-            switch (button_pressed) {
-                case 'a':
-                    ta.block_left();
-                    break;
-                case 'd':
-                    ta.block_right();
-                    break;
-                case 's':
-                    ta.block_descend(); // acelera a queda
-                    break;
-                case 'w':
-                    ta.rotate_block();
-                    break;
-                case ' ':
-                    ta.block_drop();    // queda instantânea
-                    break;
-                default:
-                    break;
-            }
-            system("CLS");
-            ta.print_table();
+        // --- B) LÓGICA DE TEMPO (QUEDA AUTOMÁTICA) ---
+        auto now = clock::now();
+        if (now - lastFall >= fallInterval) {
+            ta.block_descend();
+            lastFall = now;
         }
 
-    // 2) Queda automática
-    auto now = clock::now();
-    if (now - lastFall >= fallInterval) {
-        ta.block_descend();
-        lastFall = now;
+        // --- C) RENDERIZAÇÃO ---
+        game.draw_grid();
 
-        system("CLS");
-        ta.print_table();
-    }
+        // Desenha os blocos do jogo 
+        // Nota: Certifique-se que sua classe 'table' desenha algo na janela via ta.setGameWindow
+        ta.print_table(); 
 
-    // 3) Pequena pausa para não comer 100% da CPU
-    Sleep(10); // em milissegundos
+        window.display();
     }
 
     return 0;
