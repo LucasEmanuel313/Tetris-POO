@@ -202,6 +202,7 @@ static void renderFrameMultiplayer(const table& local, const OpponentState& opp,
     std::cout << "-------------------------------      -------------------------------\n";
     std::cout << "Score: " << local.get_score() << "   C=HOLD";
     std::cout << "   Garbage: " << (pendingIncomingGarbage > 0 ? ("+" + std::to_string(pendingIncomingGarbage)) : "0");
+    std::cout << std::string(10, ' ');
     std::cout << "                         ";
     std::cout << "Score: " << (opp.hasBoard ? opp.score : 0) << "\n";
     std::cout.flush();

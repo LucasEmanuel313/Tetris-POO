@@ -87,13 +87,15 @@ private:
         lastLandedEvent += 1;
 
         int lines = check_and_clear_lines();
+        if (lines < 0) lines = 0;
+        if (lines > 4) lines = 4; // por jogada, o máximo em Tetris é 4
         lastClearedEvent += lines;
 
         switch (lines) {
-            case 1: score += 100; break;
-            case 2: score += 300; break;
-            case 3: score += 500; break;
-            case 4: score += 800; break;
+            case 1: score += 40; break;
+            case 2: score += 100; break;
+            case 3: score += 300; break;
+            case 4: score += 1200; break;
             default: break;
         }
 
@@ -253,7 +255,8 @@ public:
             std::cout << '\n';
         }
         std::cout << "-------------------------------\n";
-        std::cout << "Score: " << score << "   C=HOLD\n";
+        std::cout << "Score: " << score << "   C=HOLD";
+        std::cout << std::string(30, ' ') << "\n";
     }
 
     int get_score() const { return score; }
