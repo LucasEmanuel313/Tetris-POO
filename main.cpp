@@ -74,17 +74,10 @@ static void drainKb() {
     }
 }
 
-static void waitEnterToMenu() {
-    drainKb();
-    std::cout << "\nPressione ENTER para voltar ao menu...";
-    std::cout.flush();
-    std::string dummy;
-    std::getline(std::cin, dummy);
-}
-
 static bool confirmLeaveToMenu() {
     drainKb();
-    std::cout << "\nSair para o menu? (Y/N) ";
+    menuClear();
+    std::cout << "Sair para o menu? (Y/N) ";
     std::cout.flush();
     while (true) {
         char c = _getch();
@@ -96,7 +89,11 @@ static bool confirmLeaveToMenu() {
 // 1 = revanche / nova partida, 0 = menu
 static int postGameChoice() {
     drainKb();
-    std::cout << "\n1) Jogar outra partida\n2) Voltar ao menu\n> ";
+    menuClear();
+    std::cout << ">>> FIM DE JOGO <<<\n\n";
+    std::cout << "1) Jogar outra partida\n";
+    std::cout << "2) Voltar ao menu\n";
+    std::cout << "> ";
     std::cout.flush();
     while (true) {
         char c = _getch();
@@ -541,11 +538,9 @@ static void runSinglePlayer() {
         }
 
         if (ta.is_game_over()) {
-            renderFrame(ta);
-            std::cout << "\n>>> GAME OVER <<<\n";
-            std::cout.flush();
             int choice = postGameChoice();
             if (choice == 1) {
+                menuClear();
                 ta.reset(true);
                 flushConsoleInputEvents();
                 lastFall = GetTickCount();
@@ -640,6 +635,8 @@ static void runMultiplayerClient(SOCKET sock) {
                 postGameWaiting = false;
                 sentGameOver = false;
 
+                menuClear();
+
                 // sempre começa uma partida nova limpa
                 ta.reset(true);
                 initialized = true;
@@ -659,6 +656,8 @@ static void runMultiplayerClient(SOCKET sock) {
                 started = true;
                 postGameWaiting = false;
                 sentGameOver = false;
+
+                menuClear();
                 ta.reset(true);
                 initialized = true;
                 pendingIncomingGarbage = 0;
@@ -674,7 +673,7 @@ static void runMultiplayerClient(SOCKET sock) {
                 if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
                 std::cout << "\n>>> O oponente nao aceitou outra partida. <<<\n";
                 std::cout.flush();
-                waitEnterToMenu();
+                Sleep(2000);
                 running = false;
             }
             else if (line.rfind("GARBAGE ", 0) == 0) {
@@ -715,7 +714,8 @@ static void runMultiplayerClient(SOCKET sock) {
                 if (choice == 1) {
                     sendLine(sock, "REMATCH YES");
                     postGameWaiting = true;
-                    std::cout << "\nAguardando oponente aceitar...\n";
+                    menuClear();
+                    std::cout << "Aguardando oponente aceitar...\n";
                     std::cout.flush();
                 } else {
                     sendLine(sock, "LEAVE");
@@ -723,13 +723,15 @@ static void runMultiplayerClient(SOCKET sock) {
                 }
             }
             else if (line == "OPPONENT_LEFT") {
-                if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
-                std::cout << "\n>>> Oponente saiu. <<<\n";
+                menuClear();
+                std::cout << ">>> Oponente saiu. <<<\n";
                 std::cout.flush();
+
+                // deixa a mensagem visível por pelo menos 2s
+                Sleep(2000);
 
                 if (isHost) {
                     // host volta a esperar outro jogador
-                    Sleep(800);
                     menuClear();
                     std::cout << "Oponente saiu. Aguardando outro jogador... (press q to cancel)\n";
                     std::cout.flush();
@@ -744,7 +746,6 @@ static void runMultiplayerClient(SOCKET sock) {
                     ta.reset(false);
                     flushConsoleInputEvents();
                 } else {
-                    waitEnterToMenu();
                     running = false;
                 }
             }
@@ -851,7 +852,8 @@ static void runMultiplayerClient(SOCKET sock) {
             if (choice == 1) {
                 sendLine(sock, "REMATCH YES");
                 postGameWaiting = true;
-                std::cout << "\nAguardando oponente aceitar...\n";
+                menuClear();
+                std::cout << "Aguardando oponente aceitar...\n";
                 std::cout.flush();
             } else {
                 sendLine(sock, "LEAVE");
@@ -929,27 +931,29 @@ int main() {
             if (mo == "1") {
                 int port = readInt("Port", 5555);
 
-                ServerState st;
-                st.port = port;
+                ServerState* st = new ServerState();
+                st->port = port;
 
                 DWORD tid = 0;
-                HANDLE hThread = CreateThread(nullptr, 0, serverThreadProc, &st, 0, &tid);
+                HANDLE hThread = CreateThread(nullptr, 0, serverThreadProc, st, 0, &tid);
                 if (!hThread) {
+                    delete st;
                     std::cout << "Could not start server thread.\nPress ENTER...\n";
                     std::string dummy; std::getline(std::cin, dummy);
                     continue;
                 }
 
                 DWORD t0 = GetTickCount();
-                while (InterlockedCompareExchange(&st.ready, 0, 0) == 0) {
+                while (InterlockedCompareExchange(&st->ready, 0, 0) == 0) {
                     if (GetTickCount() - t0 > 3000) break;
                     Sleep(50);
                 }
-                if (InterlockedCompareExchange(&st.ready, 0, 0) == 0) {
+                if (InterlockedCompareExchange(&st->ready, 0, 0) == 0) {
                     std::cout << "Server failed to start (port in use?).\n";
-                    InterlockedExchange(&st.running, 0);
-                    WaitForSingleObject(hThread, 1000);
+                    InterlockedExchange(&st->running, 0);
+                    WaitForSingleObject(hThread, INFINITE);
                     CloseHandle(hThread);
+                    delete st;
                     std::cout << "Press ENTER...\n";
                     std::string dummy; std::getline(std::cin, dummy);
                     continue;
@@ -965,9 +969,10 @@ int main() {
                 SOCKET sock = INVALID_SOCKET;
                 if (!connectToServer("127.0.0.1", port, sock)) {
                     std::cout << "Host could not connect to local server.\n";
-                    InterlockedExchange(&st.running, 0);
-                    WaitForSingleObject(hThread, 1000);
+                    InterlockedExchange(&st->running, 0);
+                    WaitForSingleObject(hThread, INFINITE);
                     CloseHandle(hThread);
+                    delete st;
                     std::cout << "Press ENTER...\n";
                     std::getline(std::cin, dummy);
                     continue;
@@ -976,9 +981,10 @@ int main() {
                 runMultiplayerClient(sock);
 
                 closesocket(sock);
-                InterlockedExchange(&st.running, 0);
-                WaitForSingleObject(hThread, 1000);
+                InterlockedExchange(&st->running, 0);
+                WaitForSingleObject(hThread, INFINITE);
                 CloseHandle(hThread);
+                delete st;
                 continue;
             }
 
