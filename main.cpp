@@ -115,7 +115,50 @@ struct OpponentState {
     OpponentState() : data(10 * 22, '.') {}
 };
 
-static void renderFrameMultiplayer(const table& local, const OpponentState& opp, int pendingIncomingGarbage, int lastAttackSent) {
+static std::string miniLineForType(int type, int miniRowFromTop) {
+    if (type < 0 || type > 6) return "        ";
+    const char (*p)[4][4] = TETROMINOES[type];
+    std::string out;
+    out.reserve(8);
+    int y = 3 - miniRowFromTop;
+    for (int x = 0; x < 4; ++x) {
+        out += ((*p)[x][y] == '#') ? "[]" : "  ";
+    }
+    return out;
+}
+
+static std::string sidePanelLineMultiplayer(const table& local, int rowIndexFromTop, int pendingIncomingGarbage) {
+    // Layout (22 linhas): HOLD(1+4) + blank(1) + NEXT(1 + 3*4 + 2 blanks) + Garbage(1)
+    const int hold = local.get_hold_type();
+    const std::vector<int> next = local.get_next_types(3);
+
+    if (rowIndexFromTop == 0) return "HOLD";
+    if (rowIndexFromTop >= 1 && rowIndexFromTop <= 4) {
+        if (hold < 0) return "(none)";
+        return miniLineForType(hold, rowIndexFromTop - 1);
+    }
+    if (rowIndexFromTop == 5) return "";
+    if (rowIndexFromTop == 6) return "NEXT";
+
+    int base = 7;
+    for (int n = 0; n < 3; ++n) {
+        int start = base + n * 5;
+        int end = start + 3;
+        if (rowIndexFromTop >= start && rowIndexFromTop <= end) {
+            int t = (n < (int)next.size()) ? next[n] : -1;
+            return miniLineForType(t, rowIndexFromTop - start);
+        }
+        if (rowIndexFromTop == start + 4) return "";
+    }
+
+    if (rowIndexFromTop == 21) {
+        if (pendingIncomingGarbage > 0) return "Garbage: +" + std::to_string(pendingIncomingGarbage);
+        return "Garbage: 0";
+    }
+    return "";
+}
+
+static void renderFrameMultiplayer(const table& local, const OpponentState& opp, int pendingIncomingGarbage) {
     initGameConsoleOnce();
     COORD home{0, 0};
     SetConsoleCursorPosition(g_hOut, home);
@@ -146,6 +189,13 @@ static void renderFrameMultiplayer(const table& local, const OpponentState& opp,
             std::cout << '|' << (c == '#' ? '#' : ' ') << '|';
         }
 
+        // painel à direita (hold/next/garbage)
+        int rowIndexFromTop = 21 - y;
+        std::string panel = sidePanelLineMultiplayer(local, rowIndexFromTop, pendingIncomingGarbage);
+        if (!panel.empty()) {
+            std::cout << "   " << panel;
+        }
+
         std::cout << '\n';
     }
 
@@ -153,10 +203,6 @@ static void renderFrameMultiplayer(const table& local, const OpponentState& opp,
     std::cout << "Score: " << local.get_score();
     std::cout << "                         ";
     std::cout << "Score: " << (opp.hasBoard ? opp.score : 0) << "\n";
-
-    std::cout << "Lixo pendente: " << pendingIncomingGarbage;
-    std::cout << "                  ";
-    std::cout << "Ultimo ataque: " << lastAttackSent << "\n";
     std::cout.flush();
 }
 
@@ -230,11 +276,10 @@ struct ServerState {
 };
 
 static int garbageFromCleared(int cleared) {
-    // regra simples: 1->0, 2->1, 3->2, 4->4
-    if (cleared <= 1) return 0;
-    if (cleared == 2) return 1;
-    if (cleared == 3) return 2;
-    return 4;
+    // regra: cada linha limpa envia 1 linha "morta" ao oponente
+    if (cleared <= 0) return 0;
+    if (cleared > 4) cleared = 4;
+    return cleared;
 }
 
 static bool processServerLine(int idx, ServerState* st, const std::string& line) {
@@ -530,6 +575,7 @@ static void runSinglePlayer() {
             if (key == 's') ta.block_descend();
             if (key == 'w') ta.rotate_block();
             if (key == ' ') ta.block_drop();
+            if (key == 'c') ta.hold_block();
 
             renderFrame(ta);
         }
@@ -575,7 +621,6 @@ static void runMultiplayerClient(SOCKET sock) {
     bool postGameWaiting = false;
     int pendingGarbage = 0;
     int pendingIncomingGarbage = 0;
-    int lastAttackSent = 0;
 
     menuClear();
     std::cout << "Multiplayer: waiting for opponent... (press q to quit)\n";
@@ -663,7 +708,6 @@ static void runMultiplayerClient(SOCKET sock) {
                 postGameWaiting = false;
                 pendingGarbage = 0;
                 pendingIncomingGarbage = 0;
-                lastAttackSent = 0;
                 opp.hasBoard = false;
                 ta.reset(false);
                 flushConsoleInputEvents();
@@ -686,14 +730,13 @@ static void runMultiplayerClient(SOCKET sock) {
                 initialized = true;
                 pendingGarbage = 0;
                 pendingIncomingGarbage = 0;
-                lastAttackSent = 0;
                 opp.hasBoard = false;
                 flushConsoleInputEvents();
 
                 lastFall = GetTickCount();
                 // manda o board inicial e desenha as duas telas
                 sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-                renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
             }
             else if (line == "REMATCH_START") {
                 // reinicia partida se ambos aceitaram
@@ -705,18 +748,17 @@ static void runMultiplayerClient(SOCKET sock) {
                 ta.reset(true);
                 initialized = true;
                 pendingIncomingGarbage = 0;
-                lastAttackSent = 0;
                 opp.hasBoard = false;
                 flushConsoleInputEvents();
 
                 lastFall = GetTickCount();
                 sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-                renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
             }
             else if (line == "REMATCH_ABORT") {
                 if (initialized) {
                     menuClear();
-                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
                     std::cout << "\n>>> O oponente nao aceitou outra partida. <<<\n";
                     std::cout.flush();
                     Sleep(2000);
@@ -730,7 +772,7 @@ static void runMultiplayerClient(SOCKET sock) {
                     // lixo recebido agora fica pendente (aplica quando a peça travar)
                     pendingIncomingGarbage += n;
                     sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
                 }
             }
             else if (line.rfind("BOARD ", 0) == 0) {
@@ -745,7 +787,7 @@ static void runMultiplayerClient(SOCKET sock) {
                         if (data.size() == 10 * 22) {
                             opp.data = std::move(data);
                             opp.hasBoard = true;
-                            if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                            if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
                         }
                     } catch (...) {
                         // ignora linha mal formada
@@ -755,7 +797,7 @@ static void runMultiplayerClient(SOCKET sock) {
             else if (line == "YOU_WIN") {
                 if (initialized) {
                     menuClear();
-                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
                 }
 
                 int choice = postGameChoiceWithTitle(">>> VOCE VENCEU | OPONENTE PERDEU <<<");
@@ -792,7 +834,6 @@ static void runMultiplayerClient(SOCKET sock) {
                     postGameWaiting = false;
                     pendingGarbage = 0;
                     pendingIncomingGarbage = 0;
-                    lastAttackSent = 0;
                     opp.hasBoard = false;
                     ta.reset(false);
                     flushConsoleInputEvents();
@@ -838,7 +879,7 @@ static void runMultiplayerClient(SOCKET sock) {
                     running = false;
                     break;
                 }
-                if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
                 continue;
             }
 
@@ -847,11 +888,11 @@ static void runMultiplayerClient(SOCKET sock) {
             if (key == 's') ta.block_descend();
             if (key == 'w') ta.rotate_block();
             if (key == ' ') ta.block_drop();
+            if (key == 'c') ta.hold_block();
 
             int cleared = ta.pop_cleared_lines_event();
             if (cleared > 0) {
                 sendLine(sock, "CLEARED " + std::to_string(cleared));
-                lastAttackSent = garbageFromCleared(cleared);
             }
 
             // aplica lixo pendente somente depois que a peça travar
@@ -863,7 +904,7 @@ static void runMultiplayerClient(SOCKET sock) {
 
             // envia seu board e renderiza as duas telas
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-            renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+            renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
         }
 
         // 5) Queda automática
@@ -875,7 +916,6 @@ static void runMultiplayerClient(SOCKET sock) {
             int cleared = ta.pop_cleared_lines_event();
             if (cleared > 0) {
                 sendLine(sock, "CLEARED " + std::to_string(cleared));
-                lastAttackSent = garbageFromCleared(cleared);
             }
 
             int landed = ta.pop_landed_event();
@@ -885,7 +925,7 @@ static void runMultiplayerClient(SOCKET sock) {
             }
 
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-            renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+            renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
         }
 
         // 6) Game over
@@ -896,7 +936,7 @@ static void runMultiplayerClient(SOCKET sock) {
             // garante que o oponente veja seu board final
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
             menuClear();
-            renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+            renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
 
             int choice = postGameChoiceWithTitle(">>> VOCE PERDEU | OPONENTE VENCEU <<<");
             if (choice == 1) {

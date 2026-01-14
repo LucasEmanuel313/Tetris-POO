@@ -73,7 +73,7 @@ static const char (*TETROMINOES[])[4][4] = {
 };
 class block {
     protected:
-        
+        int type_ = 0;
     public:
         char piece[4][4];
         int profile[4];
@@ -117,6 +117,8 @@ class block {
                 }
             }
         }
+        int type() const { return type_; }
+
         block(const char init[4][4]){
             for (size_t i = 0; i < 4; i++) {
                 for (size_t j = 0; j < 4; j++) {
@@ -124,9 +126,28 @@ class block {
                 }
             }
         }
+
+        // Constrói um tetromino específico (0..6)
+        block(int tetrominoIndex){
+            if (tetrominoIndex < 0) tetrominoIndex = 0;
+            if (tetrominoIndex > 6) tetrominoIndex = 6;
+            type_ = tetrominoIndex;
+            const char (*selected_piece)[4][4] = TETROMINOES[tetrominoIndex];
+            for (size_t i = 0; i < 4; i++) {
+                for (size_t j = 0; j < 4; j++) {
+                    piece[i][j] = (*selected_piece)[i][j];
+                }
+            }
+        }
+
         block(){
-            srand(static_cast<unsigned int>(time(0))); // Inicializa a semente do gerador de números aleatórios
+            static bool seeded = false;
+            if (!seeded) {
+                srand(static_cast<unsigned int>(time(0)));
+                seeded = true;
+            }
             int random_index = rand() % 7; // Gera um índice aleatório entre 0 e 6
+            type_ = random_index;
             const char (*selected_piece)[4][4] = TETROMINOES[random_index];
             for (size_t i = 0; i < 4; i++) {
                 for (size_t j = 0; j < 4; j++) {

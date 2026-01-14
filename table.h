@@ -3,7 +3,12 @@
 
 #include "block.h"
 #include <iostream>
-#include <cstdlib> // rand()
+#include <algorithm>
+#include <array>
+#include <deque>
+#include <random>
+#include <string>
+#include <vector>
 
 class table {
 
@@ -16,6 +21,14 @@ private:
     int block_y_pos = 0;
 
     int score = 0;
+
+    // Next/Hold (estilo Tetris)
+    static constexpr int kNextPreviewCount = 3;
+    std::mt19937 rng;
+    std::vector<int> bag;
+    std::deque<int> nextQueue;
+    int holdType = -1;          // -1 = vazio
+    bool holdUsedThisTurn = false; // só pode segurar 1x por peça
 
     // evento: linhas limpas desde a última leitura (para mandar ao servidor)
     int lastClearedEvent = 0;
@@ -86,6 +99,8 @@ private:
             return;
         }
 
+        // Nova peça
+        holdUsedThisTurn = false;
         delete current_block;
         current_block = nullptr;
         add_block();
@@ -117,6 +132,87 @@ private:
         return false;
     }
 
+    void update_table_no_overwrite() {
+        if (!current_block) return;
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                if (current_block->piece[i][j] == '#') {
+                    int x = block_x_pos + i;
+                    int y = block_y_pos + j;
+                    if (x >= 0 && x < 10 && y >= 0 && y < 22) {
+                        if (positions[x][y] == ' ') positions[x][y] = '#';
+                    }
+                }
+            }
+        }
+    }
+
+    void refill_bag_if_needed() {
+        if (!bag.empty()) return;
+        bag.clear();
+        bag.reserve(7);
+        for (int i = 0; i < 7; ++i) bag.push_back(i);
+        std::shuffle(bag.begin(), bag.end(), rng);
+    }
+
+    int draw_from_bag() {
+        refill_bag_if_needed();
+        int t = bag.back();
+        bag.pop_back();
+        return t;
+    }
+
+    void ensure_next_queue() {
+        while ((int)nextQueue.size() < kNextPreviewCount) {
+            nextQueue.push_back(draw_from_bag());
+        }
+    }
+
+    int pop_next_type() {
+        ensure_next_queue();
+        int t = nextQueue.front();
+        nextQueue.pop_front();
+        ensure_next_queue();
+        return t;
+    }
+
+    static std::string mini_line_for_type(int type, int miniRowFromTop) {
+        // miniRowFromTop: 0..3 (0 = topo)
+        if (type < 0 || type > 6) return "        ";
+        const char (*p)[4][4] = TETROMINOES[type];
+        std::string out;
+        out.reserve(8);
+        int y = 3 - miniRowFromTop; // converte para o sistema usado no piece (y cresce pra cima)
+        for (int x = 0; x < 4; ++x) {
+            out += ((*p)[x][y] == '#') ? "[]" : "  ";
+        }
+        return out;
+    }
+
+    std::string side_panel_line_single(int rowIndexFromTop) const {
+        // rowIndexFromTop: 0..21 (0 = topo da tela)
+        // Layout (22 linhas): HOLD(1+4) + blank(1) + NEXT(1 + 3*4 + 2 blanks) = 22
+        if (rowIndexFromTop == 0) return "HOLD";
+        if (rowIndexFromTop >= 1 && rowIndexFromTop <= 4) {
+            if (holdType < 0) return "(none)";
+            return mini_line_for_type(holdType, rowIndexFromTop - 1);
+        }
+        if (rowIndexFromTop == 5) return "";
+        if (rowIndexFromTop == 6) return "NEXT";
+
+        int base = 7;
+        for (int n = 0; n < kNextPreviewCount; ++n) {
+            int start = base + n * 5; // 4 linhas + 1 blank entre peças
+            int end = start + 3;
+            if (rowIndexFromTop >= start && rowIndexFromTop <= end) {
+                int t = (n < (int)nextQueue.size()) ? nextQueue[n] : -1;
+                return mini_line_for_type(t, rowIndexFromTop - start);
+            }
+            if (rowIndexFromTop == start + 4) return "";
+        }
+        return "";
+    }
+
     
 
 public:
@@ -129,6 +225,12 @@ public:
         score = 0;
         lastClearedEvent = 0;
         lastLandedEvent = 0;
+
+        std::random_device rd;
+        rng.seed(rd());
+        bag.clear();
+        nextQueue.clear();
+        ensure_next_queue();
     }
 
     ~table() {
@@ -140,6 +242,11 @@ public:
             for (int j = 0; j < 10; ++j) {
                 std::cout << '|' << positions[j][i] << '|';
             }
+            int rowIndexFromTop = 21 - i;
+            std::string panel = side_panel_line_single(rowIndexFromTop);
+            if (!panel.empty()) {
+                std::cout << "   " << panel;
+            }
             std::cout << '\n';
         }
         std::cout << "-------------------------------\n";
@@ -147,6 +254,16 @@ public:
     }
 
     int get_score() const { return score; }
+
+    int get_hold_type() const { return holdType; }
+    std::vector<int> get_next_types(int count) const {
+        if (count < 0) count = 0;
+        if (count > kNextPreviewCount) count = kNextPreviewCount;
+        std::vector<int> out;
+        out.reserve((size_t)count);
+        for (int i = 0; i < count && i < (int)nextQueue.size(); ++i) out.push_back(nextQueue[i]);
+        return out;
+    }
 
     // Multiplayer: serializa o tabuleiro (inclui a peça atual, pois ela está em positions)
     // Formato: 22 linhas (y=0..21) * 10 colunas (x=0..9), '.' vazio, '#' preenchido
@@ -221,7 +338,8 @@ public:
     }
 
     void add_block() {
-        current_block = new block();
+        int type = pop_next_type();
+        current_block = new block(type);
         block_x_pos = 3;
         block_y_pos = 18;
 
@@ -229,10 +347,42 @@ public:
         if (collides_here()) {
             gameOver = true;
             // ainda desenha a peça que tentou nascer (pra não "sumir")
-            update_table();
+            update_table_no_overwrite();
             return;
         }
         update_table();
+    }
+
+    // Hold (troca de peça) - regra: só 1 hold por peça (até ela travar)
+    void hold_block() {
+        if (!current_block || gameOver) return;
+        if (holdUsedThisTurn) return;
+
+        int curType = current_block->type();
+
+        block_clear();
+        delete current_block;
+        current_block = nullptr;
+
+        if (holdType < 0) {
+            holdType = curType;
+            add_block();
+        } else {
+            int swapType = holdType;
+            holdType = curType;
+            current_block = new block(swapType);
+            block_x_pos = 3;
+            block_y_pos = 18;
+
+            if (collides_here()) {
+                gameOver = true;
+                update_table_no_overwrite();
+            } else {
+                update_table();
+            }
+        }
+
+        holdUsedThisTurn = true;
     }
 
     // table.h  (substituir rotate_block das linhas 193–197)
@@ -335,7 +485,8 @@ public:
         block_clear();
 
         for (int k = 0; k < n; ++k) {
-            int hole = rand() % 10;
+            std::uniform_int_distribution<int> dist(0, 9);
+            int hole = dist(rng);
 
             // shift up: y = 21 <- 20 <- ... <- 0
             for (int y = 21; y > 0; --y) {
@@ -350,7 +501,15 @@ public:
             }
         }
 
-        update_table();
+        // checa colisão antes de redesenhar a peça
+        // (se redesenhar primeiro, vai colidir com ela mesma)
+        bool overlap = collides_here();
+        if (overlap) {
+            gameOver = true;
+            update_table_no_overwrite();
+        } else {
+            update_table();
+        }
 
         if (top_reached()) gameOver = true;
     }
@@ -385,6 +544,12 @@ public:
         lastClearedEvent = 0;
         lastLandedEvent = 0;
         gameOver = false;
+
+        holdType = -1;
+        holdUsedThisTurn = false;
+        bag.clear();
+        nextQueue.clear();
+        ensure_next_queue();
 
         if (spawn) add_block();
     }
