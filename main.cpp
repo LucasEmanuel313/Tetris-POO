@@ -87,10 +87,9 @@ static bool confirmLeaveToMenu() {
 }
 
 // 1 = revanche / nova partida, 0 = menu
-static int postGameChoice() {
+// Não limpa a tela: use após renderizar o(s) tabuleiro(s)
+static int postGameChoiceInline() {
     drainKb();
-    menuClear();
-    std::cout << ">>> FIM DE JOGO <<<\n\n";
     std::cout << "1) Jogar outra partida\n";
     std::cout << "2) Voltar ao menu\n";
     std::cout << "> ";
@@ -100,6 +99,11 @@ static int postGameChoice() {
         if (c == '1') return 1;
         if (c == '2' || c == 27) return 0;
     }
+}
+
+static int postGameChoiceWithTitle(const char* title) {
+    std::cout << "\n" << title << "\n\n";
+    return postGameChoiceInline();
 }
 
 // -------------------- Multiplayer rendering (two boards) --------------------
@@ -538,7 +542,10 @@ static void runSinglePlayer() {
         }
 
         if (ta.is_game_over()) {
-            int choice = postGameChoice();
+            menuClear();
+            renderFrame(ta);
+
+            int choice = postGameChoiceWithTitle(">>> GAME OVER <<<");
             if (choice == 1) {
                 menuClear();
                 ta.reset(true);
@@ -581,6 +588,43 @@ static void runMultiplayerClient(SOCKET sock) {
 
     std::string rxBuffer;
     rxBuffer.reserve(4096);
+
+    auto showOpponentLeft2s = [&]() {
+        menuClear();
+        std::cout << ">>> Oponente saiu. <<<\n";
+        std::cout.flush();
+        Sleep(2000);
+    };
+
+    // Se o oponente desconectar enquanto estamos travados num prompt (_getch),
+    // não processamos a rede. Esta função "puxa" o socket rapidamente para
+    // detectar desconexão/OPPONENT_LEFT antes de sair.
+    auto opponentLeftDuringPrompt = [&]() -> bool {
+        char temp[512];
+        bool gotData = false;
+
+        while (true) {
+            int r = recv(sock, temp, sizeof(temp), 0);
+            if (r > 0) {
+                rxBuffer.append(temp, temp + r);
+                gotData = true;
+                continue;
+            }
+            if (r == 0) {
+                return true; // conexão fechada
+            }
+            int err = WSAGetLastError();
+            if (err == WSAEWOULDBLOCK) break;
+            return true; // erro -> tratar como desconectou
+        }
+
+        if (!gotData && rxBuffer.empty()) return false;
+
+        // busca simples: se chegou a linha OPPONENT_LEFT, considera desconectou
+        // (não precisa processar tudo aqui)
+        if (rxBuffer.find("OPPONENT_LEFT") != std::string::npos) return true;
+        return false;
+    };
 
     while (running) {
         // 1) Rede
@@ -670,10 +714,13 @@ static void runMultiplayerClient(SOCKET sock) {
                 renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
             }
             else if (line == "REMATCH_ABORT") {
-                if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
-                std::cout << "\n>>> O oponente nao aceitou outra partida. <<<\n";
-                std::cout.flush();
-                Sleep(2000);
+                if (initialized) {
+                    menuClear();
+                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                    std::cout << "\n>>> O oponente nao aceitou outra partida. <<<\n";
+                    std::cout.flush();
+                    Sleep(2000);
+                }
                 running = false;
             }
             else if (line.rfind("GARBAGE ", 0) == 0) {
@@ -706,11 +753,12 @@ static void runMultiplayerClient(SOCKET sock) {
                 }
             }
             else if (line == "YOU_WIN") {
-                if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
-                std::cout << "\n>>> YOU WIN! <<<\n";
-                std::cout.flush();
+                if (initialized) {
+                    menuClear();
+                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                }
 
-                int choice = postGameChoice();
+                int choice = postGameChoiceWithTitle(">>> VOCE VENCEU | OPONENTE PERDEU <<<");
                 if (choice == 1) {
                     sendLine(sock, "REMATCH YES");
                     postGameWaiting = true;
@@ -718,6 +766,9 @@ static void runMultiplayerClient(SOCKET sock) {
                     std::cout << "Aguardando oponente aceitar...\n";
                     std::cout.flush();
                 } else {
+                    if (opponentLeftDuringPrompt()) {
+                        showOpponentLeft2s();
+                    }
                     sendLine(sock, "LEAVE");
                     running = false;
                 }
@@ -844,11 +895,10 @@ static void runMultiplayerClient(SOCKET sock) {
 
             // garante que o oponente veja seu board final
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
+            menuClear();
             renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
-            std::cout << "\n>>> GAME OVER <<<\n";
-            std::cout.flush();
 
-            int choice = postGameChoice();
+            int choice = postGameChoiceWithTitle(">>> VOCE PERDEU | OPONENTE VENCEU <<<");
             if (choice == 1) {
                 sendLine(sock, "REMATCH YES");
                 postGameWaiting = true;
@@ -856,6 +906,9 @@ static void runMultiplayerClient(SOCKET sock) {
                 std::cout << "Aguardando oponente aceitar...\n";
                 std::cout.flush();
             } else {
+                if (opponentLeftDuringPrompt()) {
+                    showOpponentLeft2s();
+                }
                 sendLine(sock, "LEAVE");
                 break;
             }
