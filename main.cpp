@@ -134,7 +134,7 @@ static std::string sidePanelLineMultiplayer(const table& local, int rowIndexFrom
 
     if (rowIndexFromTop == 0) return "HOLD";
     if (rowIndexFromTop >= 1 && rowIndexFromTop <= 4) {
-        if (hold < 0) return "(none)";
+        if (hold < 0) return (rowIndexFromTop == 1) ? "(none)" : "";
         return miniLineForType(hold, rowIndexFromTop - 1);
     }
     if (rowIndexFromTop == 5) return "";
@@ -200,7 +200,7 @@ static void renderFrameMultiplayer(const table& local, const OpponentState& opp,
     }
 
     std::cout << "-------------------------------      -------------------------------\n";
-    std::cout << "Score: " << local.get_score();
+    std::cout << "Score: " << local.get_score() << "   C=HOLD";
     std::cout << "                         ";
     std::cout << "Score: " << (opp.hasBoard ? opp.score : 0) << "\n";
     std::cout.flush();
@@ -641,6 +641,13 @@ static void runMultiplayerClient(SOCKET sock) {
         Sleep(2000);
     };
 
+    auto showWaitingRematch = [&]() {
+        menuClear();
+        std::cout << "Aguardando oponente aceitar outra partida...\n";
+        std::cout << "(C=HOLD | q=cancelar)\n";
+        std::cout.flush();
+    };
+
     // Se o oponente desconectar enquanto estamos travados num prompt (_getch),
     // não processamos a rede. Esta função "puxa" o socket rapidamente para
     // detectar desconexão/OPPONENT_LEFT antes de sair.
@@ -758,7 +765,11 @@ static void runMultiplayerClient(SOCKET sock) {
             else if (line == "REMATCH_ABORT") {
                 if (initialized) {
                     menuClear();
-                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
+                    if (!postGameWaiting) {
+                        renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
+                    } else {
+                        showWaitingRematch();
+                    }
                     std::cout << "\n>>> O oponente nao aceitou outra partida. <<<\n";
                     std::cout.flush();
                     Sleep(2000);
@@ -772,7 +783,9 @@ static void runMultiplayerClient(SOCKET sock) {
                     // lixo recebido agora fica pendente (aplica quando a peça travar)
                     pendingIncomingGarbage += n;
                     sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
+                    if (!postGameWaiting) {
+                        renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
+                    }
                 }
             }
             else if (line.rfind("BOARD ", 0) == 0) {
@@ -787,7 +800,9 @@ static void runMultiplayerClient(SOCKET sock) {
                         if (data.size() == 10 * 22) {
                             opp.data = std::move(data);
                             opp.hasBoard = true;
-                            if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
+                            if (initialized && !postGameWaiting) {
+                                renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
+                            }
                         }
                     } catch (...) {
                         // ignora linha mal formada
@@ -804,9 +819,7 @@ static void runMultiplayerClient(SOCKET sock) {
                 if (choice == 1) {
                     sendLine(sock, "REMATCH YES");
                     postGameWaiting = true;
-                    menuClear();
-                    std::cout << "Aguardando oponente aceitar...\n";
-                    std::cout.flush();
+                    showWaitingRematch();
                 } else {
                     if (opponentLeftDuringPrompt()) {
                         showOpponentLeft2s();
@@ -856,9 +869,13 @@ static void runMultiplayerClient(SOCKET sock) {
                         running = false;
                         break;
                     }
-                    menuClear();
-                    std::cout << "Waiting for opponent to join... (press q to cancel)\n";
-                    std::cout.flush();
+                    if (postGameWaiting) {
+                        showWaitingRematch();
+                    } else {
+                        menuClear();
+                        std::cout << "Waiting for opponent to join... (press q to cancel)\n";
+                        std::cout.flush();
+                    }
                 }
             }
             Sleep(30);
@@ -942,9 +959,7 @@ static void runMultiplayerClient(SOCKET sock) {
             if (choice == 1) {
                 sendLine(sock, "REMATCH YES");
                 postGameWaiting = true;
-                menuClear();
-                std::cout << "Aguardando oponente aceitar...\n";
-                std::cout.flush();
+                showWaitingRematch();
             } else {
                 if (opponentLeftDuringPrompt()) {
                     showOpponentLeft2s();
@@ -1032,6 +1047,7 @@ int main() {
                 if (!hThread) {
                     delete st;
                     std::cout << "Could not start server thread.\nPress ENTER...\n";
+                    std::cout.flush();
                     std::string dummy; std::getline(std::cin, dummy);
                     continue;
                 }
@@ -1048,6 +1064,7 @@ int main() {
                     CloseHandle(hThread);
                     delete st;
                     std::cout << "Press ENTER...\n";
+                    std::cout.flush();
                     std::string dummy; std::getline(std::cin, dummy);
                     continue;
                 }
@@ -1057,6 +1074,7 @@ int main() {
                 std::cout << "Your IP (share with friend): use ipconfig\n";
                 std::cout << "Port: " << port << "\n";
                 std::cout << "Press ENTER to start local client (host)...\n";
+                std::cout.flush();
                 std::string dummy; std::getline(std::cin, dummy);
 
                 SOCKET sock = INVALID_SOCKET;
@@ -1067,6 +1085,7 @@ int main() {
                     CloseHandle(hThread);
                     delete st;
                     std::cout << "Press ENTER...\n";
+                    std::cout.flush();
                     std::getline(std::cin, dummy);
                     continue;
                 }
@@ -1088,6 +1107,7 @@ int main() {
                 SOCKET sock = INVALID_SOCKET;
                 if (!connectToServer(ip, port, sock)) {
                     std::cout << "Could not connect to server.\nPress ENTER...\n";
+                    std::cout.flush();
                     std::string dummy; std::getline(std::cin, dummy);
                     continue;
                 }

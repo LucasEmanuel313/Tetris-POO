@@ -194,7 +194,7 @@ private:
         // Layout (22 linhas): HOLD(1+4) + blank(1) + NEXT(1 + 3*4 + 2 blanks) = 22
         if (rowIndexFromTop == 0) return "HOLD";
         if (rowIndexFromTop >= 1 && rowIndexFromTop <= 4) {
-            if (holdType < 0) return "(none)";
+            if (holdType < 0) return (rowIndexFromTop == 1) ? "(none)" : "";
             return mini_line_for_type(holdType, rowIndexFromTop - 1);
         }
         if (rowIndexFromTop == 5) return "";
@@ -250,7 +250,7 @@ public:
             std::cout << '\n';
         }
         std::cout << "-------------------------------\n";
-        std::cout << "Score: " << score << "\n";
+        std::cout << "Score: " << score << "   C=HOLD\n";
     }
 
     int get_score() const { return score; }
