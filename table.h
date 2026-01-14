@@ -20,6 +20,9 @@ private:
     // evento: linhas limpas desde a última leitura (para mandar ao servidor)
     int lastClearedEvent = 0;
 
+    // evento: peça travou (landing) desde a última leitura
+    int lastLandedEvent = 0;
+
     int right_most_col_of_piece() const {
         int maxCol = 0;
         for (int i = 0; i < 4; ++i) {
@@ -64,6 +67,9 @@ private:
     }
 
     void handle_landing() {
+        // landing ocorreu (a peça não conseguiu descer mais)
+        lastLandedEvent += 1;
+
         int lines = check_and_clear_lines();
         lastClearedEvent += lines;
 
@@ -122,6 +128,7 @@ public:
         }
         score = 0;
         lastClearedEvent = 0;
+        lastLandedEvent = 0;
     }
 
     ~table() {
@@ -353,6 +360,33 @@ public:
         int v = lastClearedEvent;
         lastClearedEvent = 0;
         return v;
+    }
+
+    int pop_landed_event() {
+        int v = lastLandedEvent;
+        lastLandedEvent = 0;
+        return v;
+    }
+
+    // Reseta o estado do tabuleiro. Se spawn=true, já nasce uma peça.
+    void reset(bool spawn = true) {
+        delete current_block;
+        current_block = nullptr;
+
+        for (int i = 0; i < 10; ++i) {
+            for (int j = 0; j < 22; ++j) {
+                positions[i][j] = ' ';
+            }
+        }
+
+        block_x_pos = 0;
+        block_y_pos = 0;
+        score = 0;
+        lastClearedEvent = 0;
+        lastLandedEvent = 0;
+        gameOver = false;
+
+        if (spawn) add_block();
     }
 };
 

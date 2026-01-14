@@ -28,6 +28,13 @@ static void clearConsoleWinAPI() {
     SetConsoleCursorPosition(g_hOut, home);
 }
 
+static void flushConsoleInputEvents() {
+    HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+    if (hIn != INVALID_HANDLE_VALUE) {
+        FlushConsoleInputBuffer(hIn);
+    }
+}
+
 static void initGameConsoleOnce() {
     if (g_consoleInited) return;
     g_consoleInited = true;
@@ -75,6 +82,29 @@ static void waitEnterToMenu() {
     std::getline(std::cin, dummy);
 }
 
+static bool confirmLeaveToMenu() {
+    drainKb();
+    std::cout << "\nSair para o menu? (Y/N) ";
+    std::cout.flush();
+    while (true) {
+        char c = _getch();
+        if (c == 'y' || c == 'Y') return true;
+        if (c == 'n' || c == 'N' || c == 27) return false; // ESC = cancelar
+    }
+}
+
+// 1 = revanche / nova partida, 0 = menu
+static int postGameChoice() {
+    drainKb();
+    std::cout << "\n1) Jogar outra partida\n2) Voltar ao menu\n> ";
+    std::cout.flush();
+    while (true) {
+        char c = _getch();
+        if (c == '1') return 1;
+        if (c == '2' || c == 27) return 0;
+    }
+}
+
 // -------------------- Multiplayer rendering (two boards) --------------------
 struct OpponentState {
     bool hasBoard = false;
@@ -84,13 +114,14 @@ struct OpponentState {
     OpponentState() : data(10 * 22, '.') {}
 };
 
-static void renderFrameMultiplayer(const table& local, const OpponentState& opp) {
+static void renderFrameMultiplayer(const table& local, const OpponentState& opp, int pendingIncomingGarbage, int lastAttackSent) {
     initGameConsoleOnce();
     COORD home{0, 0};
     SetConsoleCursorPosition(g_hOut, home);
 
     const std::string my = local.serialize_board();
-    const std::string& op = opp.hasBoard ? opp.data : OpponentState().data;
+    static const std::string kEmptyBoard(10 * 22, '.');
+    const std::string& op = opp.hasBoard ? opp.data : kEmptyBoard;
 
     // títulos
     std::cout << "   VOCE";
@@ -121,6 +152,10 @@ static void renderFrameMultiplayer(const table& local, const OpponentState& opp)
     std::cout << "Score: " << local.get_score();
     std::cout << "                         ";
     std::cout << "Score: " << (opp.hasBoard ? opp.score : 0) << "\n";
+
+    std::cout << "Lixo pendente: " << pendingIncomingGarbage;
+    std::cout << "                  ";
+    std::cout << "Ultimo ataque: " << lastAttackSent << "\n";
     std::cout.flush();
 }
 
@@ -185,6 +220,10 @@ struct ServerState {
     SOCKET clients[2]{ INVALID_SOCKET, INVALID_SOCKET };
     std::string buffers[2];
 
+    // rematch: -1 sem voto, 0 nao, 1 sim
+    int rematchVote[2]{ -1, -1 };
+    bool matchOver = false;
+
     volatile LONG ready = 0;    // 1 quando estiver escutando
     volatile LONG running = 1;  // 1 enquanto servidor ativo
 };
@@ -197,7 +236,7 @@ static int garbageFromCleared(int cleared) {
     return 4;
 }
 
-static void processServerLine(int idx, ServerState* st, const std::string& line) {
+static bool processServerLine(int idx, ServerState* st, const std::string& line) {
     int other = 1 - idx;
 
     if (line.rfind("CLEARED ", 0) == 0) {
@@ -206,12 +245,44 @@ static void processServerLine(int idx, ServerState* st, const std::string& line)
         if (g > 0 && st->clients[other] != INVALID_SOCKET) {
             sendLine(st->clients[other], "GARBAGE " + std::to_string(g));
         }
-        return;
+        return false;
     }
 
     if (line == "GAMEOVER") {
+        st->matchOver = true;
+        st->rematchVote[0] = -1;
+        st->rematchVote[1] = -1;
         if (st->clients[other] != INVALID_SOCKET) sendLine(st->clients[other], "YOU_WIN");
-        return;
+        return false;
+    }
+
+    if (line == "LEAVE") {
+        return true; // desconectar este cliente
+    }
+
+    if (line.rfind("REMATCH ", 0) == 0) {
+        if (!st->matchOver) return false;
+
+        if (line == "REMATCH YES") st->rematchVote[idx] = 1;
+        else if (line == "REMATCH NO") st->rematchVote[idx] = 0;
+
+        // se alguém disse NÃO, avisa e reseta
+        if (st->rematchVote[idx] == 0) {
+            if (st->clients[other] != INVALID_SOCKET) sendLine(st->clients[other], "REMATCH_ABORT");
+            st->rematchVote[0] = -1;
+            st->rematchVote[1] = -1;
+            return false;
+        }
+
+        // ambos aceitaram
+        if (st->rematchVote[0] == 1 && st->rematchVote[1] == 1) {
+            if (st->clients[0] != INVALID_SOCKET) sendLine(st->clients[0], "REMATCH_START");
+            if (st->clients[1] != INVALID_SOCKET) sendLine(st->clients[1], "REMATCH_START");
+            st->rematchVote[0] = -1;
+            st->rematchVote[1] = -1;
+            st->matchOver = false;
+        }
+        return false;
     }
 
     // Repasse do estado do tabuleiro para o outro jogador
@@ -219,8 +290,10 @@ static void processServerLine(int idx, ServerState* st, const std::string& line)
         if (st->clients[other] != INVALID_SOCKET) {
             sendLine(st->clients[other], line);
         }
-        return;
+        return false;
     }
+
+    return false;
 }
 
 static DWORD WINAPI serverThreadProc(LPVOID param) {
@@ -254,32 +327,77 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
         return 0;
     }
 
+    // listen non-blocking para aceitar novos guests depois
+    {
+        u_long mode = 1;
+        ioctlsocket(st->listenSock, FIONBIO, &mode);
+    }
+
     InterlockedExchange(&st->ready, 1);
 
-    st->clients[0] = accept(st->listenSock, nullptr, nullptr);
-    if (st->clients[0] == INVALID_SOCKET) {
-        InterlockedExchange(&st->running, 0);
-        return 0;
+    auto setNonBlocking = [](SOCKET s) {
+        u_long mode = 1;
+        ioctlsocket(s, FIONBIO, &mode);
+    };
+
+    auto acceptClients = [&]() {
+        while (true) {
+            SOCKET c = accept(st->listenSock, nullptr, nullptr);
+            if (c == INVALID_SOCKET) break;
+
+            setNonBlocking(c);
+
+            int slot = -1;
+            if (st->clients[0] == INVALID_SOCKET) slot = 0;
+            else if (st->clients[1] == INVALID_SOCKET) slot = 1;
+
+            if (slot == -1) {
+                closesocket(c);
+                continue;
+            }
+
+            st->clients[slot] = c;
+            st->buffers[slot].clear();
+
+            if (slot == 0) {
+                sendLine(st->clients[0], "ROLE HOST");
+                sendLine(st->clients[0], "WAITING");
+            } else {
+                sendLine(st->clients[1], "ROLE GUEST");
+            }
+
+            // se fechou par, inicia partida
+            if (st->clients[0] != INVALID_SOCKET && st->clients[1] != INVALID_SOCKET) {
+                st->rematchVote[0] = -1;
+                st->rematchVote[1] = -1;
+                st->matchOver = false;
+                sendLine(st->clients[0], "START");
+                sendLine(st->clients[1], "START");
+            }
+        }
+    };
+
+    // espera pelo host conectar primeiro
+    while (InterlockedCompareExchange(&st->running, 1, 1) == 1 && st->clients[0] == INVALID_SOCKET) {
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(st->listenSock, &readfds);
+        timeval tv{};
+        tv.tv_sec = 0;
+        tv.tv_usec = 100000;
+        int ready = select((int)st->listenSock + 1, &readfds, nullptr, nullptr, &tv);
+        if (ready == SOCKET_ERROR) break;
+        if (ready > 0 && FD_ISSET(st->listenSock, &readfds)) acceptClients();
     }
-
-    sendLine(st->clients[0], "WAITING");
-
-    st->clients[1] = accept(st->listenSock, nullptr, nullptr);
-    if (st->clients[1] == INVALID_SOCKET) {
-        closesocket(st->clients[0]);
-        st->clients[0] = INVALID_SOCKET;
-        InterlockedExchange(&st->running, 0);
-        return 0;
-    }
-
-    sendLine(st->clients[0], "START");
-    sendLine(st->clients[1], "START");
 
     while (InterlockedCompareExchange(&st->running, 1, 1) == 1) {
         fd_set readfds;
         FD_ZERO(&readfds);
 
-        SOCKET maxfd = 0;
+        SOCKET maxfd = st->listenSock;
+
+        // aceita novos clientes (guest) quando existir vaga
+        FD_SET(st->listenSock, &readfds);
         for (int i = 0; i < 2; ++i) {
             if (st->clients[i] != INVALID_SOCKET) {
                 FD_SET(st->clients[i], &readfds);
@@ -294,6 +412,10 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
         int ready = select((int)maxfd + 1, &readfds, nullptr, nullptr, &tv);
         if (ready == SOCKET_ERROR) break;
 
+        if (ready > 0 && FD_ISSET(st->listenSock, &readfds)) {
+            acceptClients();
+        }
+
         for (int i = 0; i < 2; ++i) {
             if (st->clients[i] == INVALID_SOCKET) continue;
             if (!FD_ISSET(st->clients[i], &readfds)) continue;
@@ -302,12 +424,31 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
             int r = recv(st->clients[i], temp, sizeof(temp), 0);
 
             if (r <= 0) {
-                int other = 1 - i;
                 closesocket(st->clients[i]);
                 st->clients[i] = INVALID_SOCKET;
 
-                if (st->clients[other] != INVALID_SOCKET) {
-                    sendLine(st->clients[other], "OPPONENT_LEFT");
+                st->buffers[i].clear();
+                st->rematchVote[0] = -1;
+                st->rematchVote[1] = -1;
+                st->matchOver = false;
+
+                // se o host saiu, encerra a sala e desconecta o guest
+                if (i == 0) {
+                    if (st->clients[1] != INVALID_SOCKET) {
+                        sendLine(st->clients[1], "OPPONENT_LEFT");
+                        closesocket(st->clients[1]);
+                        st->clients[1] = INVALID_SOCKET;
+                    }
+                    InterlockedExchange(&st->running, 0);
+                    break;
+                }
+
+                // se o guest saiu, mantém o host esperando outro
+                if (i == 1) {
+                    if (st->clients[0] != INVALID_SOCKET) {
+                        sendLine(st->clients[0], "OPPONENT_LEFT");
+                        sendLine(st->clients[0], "WAITING");
+                    }
                 }
                 continue;
             }
@@ -322,7 +463,30 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
                 std::string line = st->buffers[i].substr(pos, nl - pos);
                 if (!line.empty() && line.back() == '\r') line.pop_back();
 
-                processServerLine(i, st, line);
+                bool disconnect = processServerLine(i, st, line);
+                if (disconnect) {
+                    closesocket(st->clients[i]);
+                    st->clients[i] = INVALID_SOCKET;
+                    st->buffers[i].clear();
+                    st->rematchVote[0] = -1;
+                    st->rematchVote[1] = -1;
+                    st->matchOver = false;
+
+                    if (i == 0) {
+                        if (st->clients[1] != INVALID_SOCKET) {
+                            sendLine(st->clients[1], "OPPONENT_LEFT");
+                            closesocket(st->clients[1]);
+                            st->clients[1] = INVALID_SOCKET;
+                        }
+                        InterlockedExchange(&st->running, 0);
+                    } else {
+                        if (st->clients[0] != INVALID_SOCKET) {
+                            sendLine(st->clients[0], "OPPONENT_LEFT");
+                            sendLine(st->clients[0], "WAITING");
+                        }
+                    }
+                    break;
+                }
                 pos = nl + 1;
             }
             if (pos > 0) st->buffers[i].erase(0, pos);
@@ -344,6 +508,8 @@ static void runSinglePlayer() {
     table ta;
     ta.add_block();
 
+    flushConsoleInputEvents();
+
     renderFrame(ta);
 
     DWORD lastFall = GetTickCount();
@@ -352,7 +518,11 @@ static void runSinglePlayer() {
     while (true) {
         if (_kbhit()) {
             char key = _getch();
-            if (key == 'q') break;
+            if (key == 'q') {
+                if (confirmLeaveToMenu()) break;
+                renderFrame(ta);
+                continue;
+            }
 
             if (key == 'a') ta.block_left();
             if (key == 'd') ta.block_right();
@@ -374,7 +544,14 @@ static void runSinglePlayer() {
             renderFrame(ta);
             std::cout << "\n>>> GAME OVER <<<\n";
             std::cout.flush();
-            waitEnterToMenu();
+            int choice = postGameChoice();
+            if (choice == 1) {
+                ta.reset(true);
+                flushConsoleInputEvents();
+                lastFall = GetTickCount();
+                renderFrame(ta);
+                continue;
+            }
             break;
         }
 
@@ -392,10 +569,17 @@ static void runMultiplayerClient(SOCKET sock) {
     bool started = false;
     bool initialized = false;
     bool sentGameOver = false;
+    bool isHost = false;
+    bool postGameWaiting = false;
     int pendingGarbage = 0;
+    int pendingIncomingGarbage = 0;
+    int lastAttackSent = 0;
 
     menuClear();
     std::cout << "Multiplayer: waiting for opponent... (press q to quit)\n";
+    std::cout.flush();
+
+    flushConsoleInputEvents();
 
     DWORD lastFall = GetTickCount();
     const DWORD fallIntervalMs = 500;
@@ -430,31 +614,77 @@ static void runMultiplayerClient(SOCKET sock) {
 
             if (line == "WAITING") {
                 menuClear();
-                std::cout << "Waiting for opponent to join... (press q to quit)\n";
+                std::cout << "Waiting for opponent to join... (press q to cancel)\n";
+                std::cout.flush();
+
+                // volta ao estado de espera
+                started = false;
+                initialized = false;
+                sentGameOver = false;
+                postGameWaiting = false;
+                pendingGarbage = 0;
+                pendingIncomingGarbage = 0;
+                lastAttackSent = 0;
+                opp.hasBoard = false;
+                ta.reset(false);
+                flushConsoleInputEvents();
+            }
+            else if (line == "ROLE HOST") {
+                isHost = true;
+            }
+            else if (line == "ROLE GUEST") {
+                isHost = false;
             }
             else if (line == "START") {
                 started = true;
-                if (!initialized) {
-                    ta.add_block();
-                    initialized = true;
+                postGameWaiting = false;
+                sentGameOver = false;
 
-                    if (pendingGarbage > 0) {
-                        ta.apply_garbage(pendingGarbage);
-                        pendingGarbage = 0;
-                    }
-                    lastFall = GetTickCount();
-                }
+                // sempre começa uma partida nova limpa
+                ta.reset(true);
+                initialized = true;
+                pendingGarbage = 0;
+                pendingIncomingGarbage = 0;
+                lastAttackSent = 0;
+                opp.hasBoard = false;
+                flushConsoleInputEvents();
+
+                lastFall = GetTickCount();
                 // manda o board inicial e desenha as duas telas
                 sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-                renderFrameMultiplayer(ta, opp);
+                renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+            }
+            else if (line == "REMATCH_START") {
+                // reinicia partida se ambos aceitaram
+                started = true;
+                postGameWaiting = false;
+                sentGameOver = false;
+                ta.reset(true);
+                initialized = true;
+                pendingIncomingGarbage = 0;
+                lastAttackSent = 0;
+                opp.hasBoard = false;
+                flushConsoleInputEvents();
+
+                lastFall = GetTickCount();
+                sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
+                renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+            }
+            else if (line == "REMATCH_ABORT") {
+                if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                std::cout << "\n>>> O oponente nao aceitou outra partida. <<<\n";
+                std::cout.flush();
+                waitEnterToMenu();
+                running = false;
             }
             else if (line.rfind("GARBAGE ", 0) == 0) {
                 int n = std::stoi(line.substr(8));
                 if (!initialized) pendingGarbage += n;
                 else {
-                    ta.apply_garbage(n);
+                    // lixo recebido agora fica pendente (aplica quando a peça travar)
+                    pendingIncomingGarbage += n;
                     sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-                    renderFrameMultiplayer(ta, opp);
+                    renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
                 }
             }
             else if (line.rfind("BOARD ", 0) == 0) {
@@ -469,7 +699,7 @@ static void runMultiplayerClient(SOCKET sock) {
                         if (data.size() == 10 * 22) {
                             opp.data = std::move(data);
                             opp.hasBoard = true;
-                            if (initialized) renderFrameMultiplayer(ta, opp);
+                            if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
                         }
                     } catch (...) {
                         // ignora linha mal formada
@@ -477,18 +707,46 @@ static void runMultiplayerClient(SOCKET sock) {
                 }
             }
             else if (line == "YOU_WIN") {
-                if (initialized) renderFrameMultiplayer(ta, opp);
+                if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
                 std::cout << "\n>>> YOU WIN! <<<\n";
                 std::cout.flush();
-                waitEnterToMenu();
-                running = false;
+
+                int choice = postGameChoice();
+                if (choice == 1) {
+                    sendLine(sock, "REMATCH YES");
+                    postGameWaiting = true;
+                    std::cout << "\nAguardando oponente aceitar...\n";
+                    std::cout.flush();
+                } else {
+                    sendLine(sock, "LEAVE");
+                    running = false;
+                }
             }
             else if (line == "OPPONENT_LEFT") {
-                if (initialized) renderFrameMultiplayer(ta, opp);
-                std::cout << "\n>>> Opponent left. <<<\n";
+                if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                std::cout << "\n>>> Oponente saiu. <<<\n";
                 std::cout.flush();
-                waitEnterToMenu();
-                running = false;
+
+                if (isHost) {
+                    // host volta a esperar outro jogador
+                    Sleep(800);
+                    menuClear();
+                    std::cout << "Oponente saiu. Aguardando outro jogador... (press q to cancel)\n";
+                    std::cout.flush();
+                    started = false;
+                    initialized = false;
+                    sentGameOver = false;
+                    postGameWaiting = false;
+                    pendingGarbage = 0;
+                    pendingIncomingGarbage = 0;
+                    lastAttackSent = 0;
+                    opp.hasBoard = false;
+                    ta.reset(false);
+                    flushConsoleInputEvents();
+                } else {
+                    waitEnterToMenu();
+                    running = false;
+                }
             }
 
             pos = nl + 1;
@@ -496,10 +754,19 @@ static void runMultiplayerClient(SOCKET sock) {
         if (pos > 0) rxBuffer.erase(0, pos);
 
         // 3) Antes do START
-        if (!started) {
+        if (!started || postGameWaiting) {
             if (_kbhit()) {
                 char key = _getch();
-                if (key == 'q') { running = false; break; }
+                if (key == 'q') {
+                    if (confirmLeaveToMenu()) {
+                        sendLine(sock, "LEAVE");
+                        running = false;
+                        break;
+                    }
+                    menuClear();
+                    std::cout << "Waiting for opponent to join... (press q to cancel)\n";
+                    std::cout.flush();
+                }
             }
             Sleep(30);
             continue;
@@ -513,7 +780,15 @@ static void runMultiplayerClient(SOCKET sock) {
         // 4) Input
         if (_kbhit()) {
             char key = _getch();
-            if (key == 'q') { running = false; break; }
+            if (key == 'q') {
+                if (confirmLeaveToMenu()) {
+                    sendLine(sock, "LEAVE");
+                    running = false;
+                    break;
+                }
+                if (initialized) renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
+                continue;
+            }
 
             if (key == 'a') ta.block_left();
             if (key == 'd') ta.block_right();
@@ -522,11 +797,21 @@ static void runMultiplayerClient(SOCKET sock) {
             if (key == ' ') ta.block_drop();
 
             int cleared = ta.pop_cleared_lines_event();
-            if (cleared > 0) sendLine(sock, "CLEARED " + std::to_string(cleared));
+            if (cleared > 0) {
+                sendLine(sock, "CLEARED " + std::to_string(cleared));
+                lastAttackSent = garbageFromCleared(cleared);
+            }
+
+            // aplica lixo pendente somente depois que a peça travar
+            int landed = ta.pop_landed_event();
+            if (landed > 0 && pendingIncomingGarbage > 0) {
+                ta.apply_garbage(pendingIncomingGarbage);
+                pendingIncomingGarbage = 0;
+            }
 
             // envia seu board e renderiza as duas telas
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-            renderFrameMultiplayer(ta, opp);
+            renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
         }
 
         // 5) Queda automática
@@ -536,10 +821,19 @@ static void runMultiplayerClient(SOCKET sock) {
             lastFall = now;
 
             int cleared = ta.pop_cleared_lines_event();
-            if (cleared > 0) sendLine(sock, "CLEARED " + std::to_string(cleared));
+            if (cleared > 0) {
+                sendLine(sock, "CLEARED " + std::to_string(cleared));
+                lastAttackSent = garbageFromCleared(cleared);
+            }
+
+            int landed = ta.pop_landed_event();
+            if (landed > 0 && pendingIncomingGarbage > 0) {
+                ta.apply_garbage(pendingIncomingGarbage);
+                pendingIncomingGarbage = 0;
+            }
 
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-            renderFrameMultiplayer(ta, opp);
+            renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
         }
 
         // 6) Game over
@@ -549,11 +843,20 @@ static void runMultiplayerClient(SOCKET sock) {
 
             // garante que o oponente veja seu board final
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
-            renderFrameMultiplayer(ta, opp);
+            renderFrameMultiplayer(ta, opp, pendingIncomingGarbage, lastAttackSent);
             std::cout << "\n>>> GAME OVER <<<\n";
             std::cout.flush();
-            waitEnterToMenu();
-            break;
+
+            int choice = postGameChoice();
+            if (choice == 1) {
+                sendLine(sock, "REMATCH YES");
+                postGameWaiting = true;
+                std::cout << "\nAguardando oponente aceitar...\n";
+                std::cout.flush();
+            } else {
+                sendLine(sock, "LEAVE");
+                break;
+            }
         }
 
         Sleep(10);
@@ -593,6 +896,7 @@ int main() {
 
     while (true) {
         menuClear();
+        flushConsoleInputEvents();
         std::cout << "==== TETRIS ====\n";
         std::cout << "1) Singleplayer\n";
         std::cout << "2) Multiplayer\n";
