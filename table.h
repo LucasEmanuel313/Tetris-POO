@@ -30,6 +30,9 @@ private:
     int holdType = -1;          // -1 = vazio
     bool holdUsedThisTurn = false; // só pode segurar 1x por peça
 
+    // Quando uma peça trava, deixamos a próxima nascer depois (p/ aplicar garbage entre peças)
+    bool needsSpawn = false;
+
     // evento: linhas limpas desde a última leitura (para mandar ao servidor)
     int lastClearedEvent = 0;
 
@@ -103,7 +106,7 @@ private:
         holdUsedThisTurn = false;
         delete current_block;
         current_block = nullptr;
-        add_block();
+        needsSpawn = true;
     }
     bool gameOver = false;
 
@@ -342,6 +345,7 @@ public:
         current_block = new block(type);
         block_x_pos = 3;
         block_y_pos = 18;
+        needsSpawn = false;
 
         // se já nasce colidindo com o topo/stack, game over imediato
         if (collides_here()) {
@@ -351,6 +355,14 @@ public:
             return;
         }
         update_table();
+    }
+
+    // Chame depois de aplicar garbage (ou a cada frame) para garantir que a próxima peça nasça.
+    void spawn_if_needed() {
+        if (gameOver) return;
+        if (!needsSpawn) return;
+        if (current_block != nullptr) return;
+        add_block();
     }
 
     // Hold (troca de peça) - regra: só 1 hold por peça (até ela travar)
@@ -480,11 +492,18 @@ public:
 
     // --- Multiplayer hook: recebe lixo do servidor ---
     void apply_garbage(int n) {
-        if (!current_block) return;
+        if (n <= 0) return;
 
-        block_clear();
+        bool hadActive = (current_block != nullptr);
+        if (hadActive) block_clear();
 
         for (int k = 0; k < n; ++k) {
+            // Se já existe algo no topo, subir mais significa estourar o teto.
+            if (top_reached()) {
+                gameOver = true;
+                return;
+            }
+
             std::uniform_int_distribution<int> dist(0, 9);
             int hole = dist(rng);
 
@@ -501,14 +520,16 @@ public:
             }
         }
 
-        // checa colisão antes de redesenhar a peça
-        // (se redesenhar primeiro, vai colidir com ela mesma)
-        bool overlap = collides_here();
-        if (overlap) {
-            gameOver = true;
-            update_table_no_overwrite();
-        } else {
-            update_table();
+        if (hadActive) {
+            // checa colisão antes de redesenhar a peça
+            // (se redesenhar primeiro, vai colidir com ela mesma)
+            bool overlap = collides_here();
+            if (overlap) {
+                gameOver = true;
+                update_table_no_overwrite();
+            } else {
+                update_table();
+            }
         }
 
         if (top_reached()) gameOver = true;
@@ -547,6 +568,7 @@ public:
 
         holdType = -1;
         holdUsedThisTurn = false;
+        needsSpawn = false;
         bag.clear();
         nextQueue.clear();
         ensure_next_queue();

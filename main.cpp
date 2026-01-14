@@ -201,6 +201,7 @@ static void renderFrameMultiplayer(const table& local, const OpponentState& opp,
 
     std::cout << "-------------------------------      -------------------------------\n";
     std::cout << "Score: " << local.get_score() << "   C=HOLD";
+    std::cout << "   Garbage: " << (pendingIncomingGarbage > 0 ? ("+" + std::to_string(pendingIncomingGarbage)) : "0");
     std::cout << "                         ";
     std::cout << "Score: " << (opp.hasBoard ? opp.score : 0) << "\n";
     std::cout.flush();
@@ -577,6 +578,8 @@ static void runSinglePlayer() {
             if (key == ' ') ta.block_drop();
             if (key == 'c') ta.hold_block();
 
+            ta.spawn_if_needed();
+
             renderFrame(ta);
         }
 
@@ -584,6 +587,8 @@ static void runSinglePlayer() {
         if (now - lastFall >= fallIntervalMs) {
             ta.block_descend();
             lastFall = now;
+
+            ta.spawn_if_needed();
             renderFrame(ta);
         }
 
@@ -644,7 +649,7 @@ static void runMultiplayerClient(SOCKET sock) {
     auto showWaitingRematch = [&]() {
         menuClear();
         std::cout << "Aguardando oponente aceitar outra partida...\n";
-        std::cout << "(C=HOLD | q=cancelar)\n";
+        std::cout << "(q=cancelar)\n";
         std::cout.flush();
     };
 
@@ -707,6 +712,9 @@ static void runMultiplayerClient(SOCKET sock) {
                 menuClear();
                 std::cout << "Waiting for opponent to join... (press q to cancel)\n";
                 std::cout.flush();
+
+                // O servidor só manda WAITING pro host (slot 0)
+                isHost = true;
 
                 // volta ao estado de espera
                 started = false;
@@ -833,6 +841,17 @@ static void runMultiplayerClient(SOCKET sock) {
                 std::cout << ">>> Oponente saiu. <<<\n";
                 std::cout.flush();
 
+                // interrompe a partida imediatamente (não deixa o host continuar jogando)
+                started = false;
+                initialized = false;
+                sentGameOver = false;
+                postGameWaiting = false;
+                pendingGarbage = 0;
+                pendingIncomingGarbage = 0;
+                opp.hasBoard = false;
+                ta.reset(false);
+                flushConsoleInputEvents();
+
                 // deixa a mensagem visível por pelo menos 2s
                 Sleep(2000);
 
@@ -841,15 +860,6 @@ static void runMultiplayerClient(SOCKET sock) {
                     menuClear();
                     std::cout << "Oponente saiu. Aguardando outro jogador... (press q to cancel)\n";
                     std::cout.flush();
-                    started = false;
-                    initialized = false;
-                    sentGameOver = false;
-                    postGameWaiting = false;
-                    pendingGarbage = 0;
-                    pendingIncomingGarbage = 0;
-                    opp.hasBoard = false;
-                    ta.reset(false);
-                    flushConsoleInputEvents();
                 } else {
                     running = false;
                 }
@@ -914,9 +924,12 @@ static void runMultiplayerClient(SOCKET sock) {
 
             // aplica lixo pendente somente depois que a peça travar
             int landed = ta.pop_landed_event();
-            if (landed > 0 && pendingIncomingGarbage > 0) {
-                ta.apply_garbage(pendingIncomingGarbage);
-                pendingIncomingGarbage = 0;
+            if (landed > 0) {
+                if (pendingIncomingGarbage > 0) {
+                    ta.apply_garbage(pendingIncomingGarbage);
+                    pendingIncomingGarbage = 0;
+                }
+                ta.spawn_if_needed();
             }
 
             // envia seu board e renderiza as duas telas
@@ -936,9 +949,12 @@ static void runMultiplayerClient(SOCKET sock) {
             }
 
             int landed = ta.pop_landed_event();
-            if (landed > 0 && pendingIncomingGarbage > 0) {
-                ta.apply_garbage(pendingIncomingGarbage);
-                pendingIncomingGarbage = 0;
+            if (landed > 0) {
+                if (pendingIncomingGarbage > 0) {
+                    ta.apply_garbage(pendingIncomingGarbage);
+                    pendingIncomingGarbage = 0;
+                }
+                ta.spawn_if_needed();
             }
 
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
