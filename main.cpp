@@ -1,13 +1,128 @@
-#include <iostream>
-#include <string>
-#include <cstdlib>
-#include <conio.h>
-#include <windows.h>   // Sleep, GetTickCount, CreateThread
-
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 
+#include <windows.h>   // Sleep, GetTickCount, CreateThread, console API
+#include <conio.h>
+#include <cstdlib>
+#include <iostream>
+#include <string>
+
 #include "table.h"
+
+// -------------------- Console rendering helpers --------------------
+static HANDLE g_hOut = INVALID_HANDLE_VALUE;
+static bool g_consoleInited = false;
+
+static void clearConsoleWinAPI() {
+    if (g_hOut == INVALID_HANDLE_VALUE) return;
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (!GetConsoleScreenBufferInfo(g_hOut, &csbi)) return;
+
+    DWORD cellCount = (DWORD)csbi.dwSize.X * (DWORD)csbi.dwSize.Y;
+    DWORD count;
+    COORD home = {0, 0};
+
+    FillConsoleOutputCharacter(g_hOut, ' ', cellCount, home, &count);
+    FillConsoleOutputAttribute(g_hOut, csbi.wAttributes, cellCount, home, &count);
+    SetConsoleCursorPosition(g_hOut, home);
+}
+
+static void initGameConsoleOnce() {
+    if (g_consoleInited) return;
+    g_consoleInited = true;
+
+    g_hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    // esconder cursor (reduz flicker)
+    CONSOLE_CURSOR_INFO ci;
+    ci.dwSize = 25;
+    ci.bVisible = FALSE;
+    SetConsoleCursorInfo(g_hOut, &ci);
+
+    // acelera i/o do cout
+    std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+
+    clearConsoleWinAPI(); // limpa uma vez
+}
+
+static void renderFrame(table& ta) {
+    initGameConsoleOnce();
+    COORD home{0, 0};
+    SetConsoleCursorPosition(g_hOut, home);
+    ta.print_table();
+    std::cout.flush();
+}
+
+static void menuClear() {
+    // Para menus: limpar a tela inteira (sem flicker absurdo, porque não é por frame)
+    if (g_hOut == INVALID_HANDLE_VALUE) g_hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    clearConsoleWinAPI();
+}
+
+static void drainKb() {
+    while (_kbhit()) {
+        (void)_getch();
+    }
+}
+
+static void waitEnterToMenu() {
+    drainKb();
+    std::cout << "\nPressione ENTER para voltar ao menu...";
+    std::cout.flush();
+    std::string dummy;
+    std::getline(std::cin, dummy);
+}
+
+// -------------------- Multiplayer rendering (two boards) --------------------
+struct OpponentState {
+    bool hasBoard = false;
+    int score = 0;
+    std::string data; // 220 chars: '.' or '#', y=0..21 then x=0..9
+
+    OpponentState() : data(10 * 22, '.') {}
+};
+
+static void renderFrameMultiplayer(const table& local, const OpponentState& opp) {
+    initGameConsoleOnce();
+    COORD home{0, 0};
+    SetConsoleCursorPosition(g_hOut, home);
+
+    const std::string my = local.serialize_board();
+    const std::string& op = opp.hasBoard ? opp.data : OpponentState().data;
+
+    // títulos
+    std::cout << "   VOCE";
+    std::cout << "                          ";
+    std::cout << "OPONENTE";
+    std::cout << "\n\n";
+
+    // 22 linhas do tabuleiro (imprime de cima para baixo)
+    for (int y = 21; y >= 0; --y) {
+        // board local
+        for (int x = 0; x < 10; ++x) {
+            char c = my[y * 10 + x];
+            std::cout << '|' << (c == '#' ? '#' : ' ') << '|';
+        }
+
+        std::cout << "      ";
+
+        // board oponente
+        for (int x = 0; x < 10; ++x) {
+            char c = op[y * 10 + x];
+            std::cout << '|' << (c == '#' ? '#' : ' ') << '|';
+        }
+
+        std::cout << '\n';
+    }
+
+    std::cout << "-------------------------------      -------------------------------\n";
+    std::cout << "Score: " << local.get_score();
+    std::cout << "                         ";
+    std::cout << "Score: " << (opp.hasBoard ? opp.score : 0) << "\n";
+    std::cout.flush();
+}
 
 // -------------------- WinSock helpers --------------------
 static bool sendLine(SOCKET s, const std::string& line) {
@@ -98,12 +213,19 @@ static void processServerLine(int idx, ServerState* st, const std::string& line)
         if (st->clients[other] != INVALID_SOCKET) sendLine(st->clients[other], "YOU_WIN");
         return;
     }
+
+    // Repasse do estado do tabuleiro para o outro jogador
+    if (line.rfind("BOARD ", 0) == 0) {
+        if (st->clients[other] != INVALID_SOCKET) {
+            sendLine(st->clients[other], line);
+        }
+        return;
+    }
 }
 
 static DWORD WINAPI serverThreadProc(LPVOID param) {
     ServerState* st = reinterpret_cast<ServerState*>(param);
 
-    // cria socket de escuta
     st->listenSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (st->listenSock == INVALID_SOCKET) {
         InterlockedExchange(&st->ready, 0);
@@ -111,7 +233,6 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
         return 0;
     }
 
-    // bind em 0.0.0.0:port (aceita rede local)
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -133,20 +254,16 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
         return 0;
     }
 
-    // sinaliza pro main thread que o server está pronto
     InterlockedExchange(&st->ready, 1);
 
-    // aceita 1º cliente
     st->clients[0] = accept(st->listenSock, nullptr, nullptr);
     if (st->clients[0] == INVALID_SOCKET) {
         InterlockedExchange(&st->running, 0);
         return 0;
     }
 
-    // avisa que ainda falta o oponente
     sendLine(st->clients[0], "WAITING");
 
-    // aceita 2º cliente
     st->clients[1] = accept(st->listenSock, nullptr, nullptr);
     if (st->clients[1] == INVALID_SOCKET) {
         closesocket(st->clients[0]);
@@ -155,11 +272,9 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
         return 0;
     }
 
-    // agora começa pros dois
     sendLine(st->clients[0], "START");
     sendLine(st->clients[1], "START");
 
-    // loop de repasse (select)
     while (InterlockedCompareExchange(&st->running, 1, 1) == 1) {
         fd_set readfds;
         FD_ZERO(&readfds);
@@ -172,15 +287,12 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
             }
         }
 
-        // timeout para não travar
         timeval tv{};
         tv.tv_sec = 0;
         tv.tv_usec = 100000; // 100ms
 
         int ready = select((int)maxfd + 1, &readfds, nullptr, nullptr, &tv);
-        if (ready == SOCKET_ERROR) {
-            break;
-        }
+        if (ready == SOCKET_ERROR) break;
 
         for (int i = 0; i < 2; ++i) {
             if (st->clients[i] == INVALID_SOCKET) continue;
@@ -190,7 +302,6 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
             int r = recv(st->clients[i], temp, sizeof(temp), 0);
 
             if (r <= 0) {
-                // desconectou
                 int other = 1 - i;
                 closesocket(st->clients[i]);
                 st->clients[i] = INVALID_SOCKET;
@@ -203,7 +314,6 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
 
             st->buffers[i].append(temp, temp + r);
 
-            // parse por '\n'
             size_t pos = 0;
             while (true) {
                 size_t nl = st->buffers[i].find('\n', pos);
@@ -212,20 +322,15 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
                 std::string line = st->buffers[i].substr(pos, nl - pos);
                 if (!line.empty() && line.back() == '\r') line.pop_back();
 
-                // aqui você processa CLEARED / GAMEOVER
                 processServerLine(i, st, line);
-
                 pos = nl + 1;
             }
             if (pos > 0) st->buffers[i].erase(0, pos);
         }
 
-        if (st->clients[0] == INVALID_SOCKET && st->clients[1] == INVALID_SOCKET) {
-            break;
-        }
+        if (st->clients[0] == INVALID_SOCKET && st->clients[1] == INVALID_SOCKET) break;
     }
 
-    // cleanup
     if (st->clients[0] != INVALID_SOCKET) closesocket(st->clients[0]);
     if (st->clients[1] != INVALID_SOCKET) closesocket(st->clients[1]);
     if (st->listenSock != INVALID_SOCKET) closesocket(st->listenSock);
@@ -234,44 +339,12 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
     return 0;
 }
 
-
-
 // -------------------- Game loop --------------------
-static void processIncoming(table& ta, const std::string& line, bool& running, bool& started) {
-    if (line == "START") {
-        started = true;
-        system("CLS");
-        ta.print_table();
-        return;
-    }
-    if (line.rfind("GARBAGE ", 0) == 0) {
-        int n = std::stoi(line.substr(8));
-        ta.apply_garbage(n);
-        system("CLS");
-        ta.print_table();
-        return;
-    }
-    if (line == "YOU_WIN") {
-        system("CLS");
-        ta.print_table();
-        std::cout << "\n>>> YOU WIN! <<<\n";
-        running = false;
-        return;
-    }
-    if (line == "OPPONENT_LEFT") {
-        system("CLS");
-        ta.print_table();
-        std::cout << "\n>>> Opponent left. <<<\n";
-        running = false;
-        return;
-    }
-}
-
 static void runSinglePlayer() {
     table ta;
     ta.add_block();
-    system("CLS");
-    ta.print_table();
+
+    renderFrame(ta);
 
     DWORD lastFall = GetTickCount();
     const DWORD fallIntervalMs = 500;
@@ -287,42 +360,41 @@ static void runSinglePlayer() {
             if (key == 'w') ta.rotate_block();
             if (key == ' ') ta.block_drop();
 
-            system("CLS");
-            ta.print_table();
+            renderFrame(ta);
         }
 
         DWORD now = GetTickCount();
         if (now - lastFall >= fallIntervalMs) {
             ta.block_descend();
             lastFall = now;
-            system("CLS");
-            ta.print_table();
+            renderFrame(ta);
         }
 
         if (ta.is_game_over()) {
-        system("CLS");
-        ta.print_table();
-        std::cout << "\n>>> GAME OVER <<<\n";
-        Sleep(1500);
-        break;
+            renderFrame(ta);
+            std::cout << "\n>>> GAME OVER <<<\n";
+            std::cout.flush();
+            waitEnterToMenu();
+            break;
         }
-
 
         Sleep(10);
     }
+
+    menuClear(); // volta pro menu com tela limpa
 }
 
 static void runMultiplayerClient(SOCKET sock) {
     table ta;
+    OpponentState opp;
 
     bool running = true;
-    bool started = false;       // só vira true quando chega START
-    bool initialized = false;   // só cria a primeira peça depois do START
+    bool started = false;
+    bool initialized = false;
     bool sentGameOver = false;
+    int pendingGarbage = 0;
 
-    int pendingGarbage = 0;     // se chegar lixo antes de inicializar, guarda
-
-    system("CLS");
+    menuClear();
     std::cout << "Multiplayer: waiting for opponent... (press q to quit)\n";
 
     DWORD lastFall = GetTickCount();
@@ -332,7 +404,7 @@ static void runMultiplayerClient(SOCKET sock) {
     rxBuffer.reserve(4096);
 
     while (running) {
-        // 1) Rede: recv non-blocking
+        // 1) Rede
         char temp[512];
         while (true) {
             int r = recv(sock, temp, sizeof(temp), 0);
@@ -347,7 +419,7 @@ static void runMultiplayerClient(SOCKET sock) {
             }
         }
 
-        // 2) Parse por linhas
+        // 2) Parse linhas
         size_t pos = 0;
         while (true) {
             size_t nl = rxBuffer.find('\n', pos);
@@ -357,43 +429,65 @@ static void runMultiplayerClient(SOCKET sock) {
             if (!line.empty() && line.back() == '\r') line.pop_back();
 
             if (line == "WAITING") {
-                system("CLS");
+                menuClear();
                 std::cout << "Waiting for opponent to join... (press q to quit)\n";
             }
             else if (line == "START") {
                 started = true;
                 if (!initialized) {
-                    ta.add_block();              // <<< só aqui cria a peça
+                    ta.add_block();
                     initialized = true;
 
-                    if (pendingGarbage > 0) {    // aplica lixo acumulado
+                    if (pendingGarbage > 0) {
                         ta.apply_garbage(pendingGarbage);
                         pendingGarbage = 0;
                     }
-                    lastFall = GetTickCount();   // reseta clock
+                    lastFall = GetTickCount();
                 }
-                system("CLS");
-                ta.print_table();
+                // manda o board inicial e desenha as duas telas
+                sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
+                renderFrameMultiplayer(ta, opp);
             }
             else if (line.rfind("GARBAGE ", 0) == 0) {
                 int n = std::stoi(line.substr(8));
                 if (!initialized) pendingGarbage += n;
                 else {
                     ta.apply_garbage(n);
-                    system("CLS");
-                    ta.print_table();
+                    sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
+                    renderFrameMultiplayer(ta, opp);
+                }
+            }
+            else if (line.rfind("BOARD ", 0) == 0) {
+                // formato: BOARD <score> <220chars>
+                // parse simples: encontra primeiro e segundo espaço
+                size_t p1 = line.find(' ');
+                size_t p2 = (p1 == std::string::npos) ? std::string::npos : line.find(' ', p1 + 1);
+                if (p2 != std::string::npos) {
+                    try {
+                        opp.score = std::stoi(line.substr(p1 + 1, p2 - (p1 + 1)));
+                        std::string data = line.substr(p2 + 1);
+                        if (data.size() == 10 * 22) {
+                            opp.data = std::move(data);
+                            opp.hasBoard = true;
+                            if (initialized) renderFrameMultiplayer(ta, opp);
+                        }
+                    } catch (...) {
+                        // ignora linha mal formada
+                    }
                 }
             }
             else if (line == "YOU_WIN") {
-                system("CLS");
-                if (initialized) ta.print_table();
+                if (initialized) renderFrameMultiplayer(ta, opp);
                 std::cout << "\n>>> YOU WIN! <<<\n";
+                std::cout.flush();
+                waitEnterToMenu();
                 running = false;
             }
             else if (line == "OPPONENT_LEFT") {
-                system("CLS");
-                if (initialized) ta.print_table();
+                if (initialized) renderFrameMultiplayer(ta, opp);
                 std::cout << "\n>>> Opponent left. <<<\n";
+                std::cout.flush();
+                waitEnterToMenu();
                 running = false;
             }
 
@@ -401,7 +495,7 @@ static void runMultiplayerClient(SOCKET sock) {
         }
         if (pos > 0) rxBuffer.erase(0, pos);
 
-        // 3) Antes do START: não joga, só espera
+        // 3) Antes do START
         if (!started) {
             if (_kbhit()) {
                 char key = _getch();
@@ -430,11 +524,12 @@ static void runMultiplayerClient(SOCKET sock) {
             int cleared = ta.pop_cleared_lines_event();
             if (cleared > 0) sendLine(sock, "CLEARED " + std::to_string(cleared));
 
-            system("CLS");
-            ta.print_table();
+            // envia seu board e renderiza as duas telas
+            sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
+            renderFrameMultiplayer(ta, opp);
         }
 
-        // 5) Clock automático
+        // 5) Queda automática
         DWORD now = GetTickCount();
         if (now - lastFall >= fallIntervalMs) {
             ta.block_descend();
@@ -443,8 +538,8 @@ static void runMultiplayerClient(SOCKET sock) {
             int cleared = ta.pop_cleared_lines_event();
             if (cleared > 0) sendLine(sock, "CLEARED " + std::to_string(cleared));
 
-            system("CLS");
-            ta.print_table();
+            sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
+            renderFrameMultiplayer(ta, opp);
         }
 
         // 6) Game over
@@ -452,21 +547,25 @@ static void runMultiplayerClient(SOCKET sock) {
             sendLine(sock, "GAMEOVER");
             sentGameOver = true;
 
-            system("CLS");
-            ta.print_table();
+            // garante que o oponente veja seu board final
+            sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
+            renderFrameMultiplayer(ta, opp);
             std::cout << "\n>>> GAME OVER <<<\n";
-            Sleep(1500);
+            std::cout.flush();
+            waitEnterToMenu();
             break;
         }
 
         Sleep(10);
     }
-}
 
+    menuClear();
+}
 
 // -------------------- Menu helpers --------------------
 static int readInt(const std::string& prompt, int def) {
     std::cout << prompt << " (default " << def << "): ";
+    std::cout.flush();
     std::string s;
     std::getline(std::cin, s);
     if (s.empty()) return def;
@@ -475,6 +574,7 @@ static int readInt(const std::string& prompt, int def) {
 
 static std::string readStr(const std::string& prompt, const std::string& def) {
     std::cout << prompt << " (default " << def << "): ";
+    std::cout.flush();
     std::string s;
     std::getline(std::cin, s);
     if (s.empty()) return def;
@@ -482,20 +582,23 @@ static std::string readStr(const std::string& prompt, const std::string& def) {
 }
 
 int main() {
-    // WinSock init (uma vez)
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
         std::cerr << "WSAStartup failed\n";
         return 1;
     }
 
+    // pega handle do console cedo (pra menuClear funcionar)
+    g_hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+
     while (true) {
-        system("CLS");
+        menuClear();
         std::cout << "==== TETRIS ====\n";
         std::cout << "1) Singleplayer\n";
         std::cout << "2) Multiplayer\n";
         std::cout << "0) Exit\n";
         std::cout << "> ";
+        std::cout.flush();
 
         std::string opt;
         std::getline(std::cin, opt);
@@ -507,12 +610,13 @@ int main() {
         }
 
         if (opt == "2") {
-            system("CLS");
+            menuClear();
             std::cout << "== Multiplayer ==\n";
             std::cout << "1) Create room (Host)\n";
             std::cout << "2) Join room\n";
             std::cout << "0) Back\n";
             std::cout << "> ";
+            std::cout.flush();
 
             std::string mo;
             std::getline(std::cin, mo);
@@ -521,20 +625,17 @@ int main() {
             if (mo == "1") {
                 int port = readInt("Port", 5555);
 
-                // start embedded server
                 ServerState st;
                 st.port = port;
 
                 DWORD tid = 0;
                 HANDLE hThread = CreateThread(nullptr, 0, serverThreadProc, &st, 0, &tid);
                 if (!hThread) {
-                    std::cout << "Could not start server thread.\n";
-                    std::cout << "Press ENTER...\n";
+                    std::cout << "Could not start server thread.\nPress ENTER...\n";
                     std::string dummy; std::getline(std::cin, dummy);
                     continue;
                 }
 
-                // espera o server ficar pronto
                 DWORD t0 = GetTickCount();
                 while (InterlockedCompareExchange(&st.ready, 0, 0) == 0) {
                     if (GetTickCount() - t0 > 3000) break;
@@ -550,13 +651,13 @@ int main() {
                     continue;
                 }
 
+                menuClear();
                 std::cout << "Room created!\n";
                 std::cout << "Your IP (share with friend): use ipconfig\n";
                 std::cout << "Port: " << port << "\n";
-                std::cout << "Waiting opponent... (press ENTER to start local client)\n";
+                std::cout << "Press ENTER to start local client (host)...\n";
                 std::string dummy; std::getline(std::cin, dummy);
 
-                // host connects locally
                 SOCKET sock = INVALID_SOCKET;
                 if (!connectToServer("127.0.0.1", port, sock)) {
                     std::cout << "Host could not connect to local server.\n";
@@ -570,12 +671,10 @@ int main() {
 
                 runMultiplayerClient(sock);
 
-                // cleanup
                 closesocket(sock);
                 InterlockedExchange(&st.running, 0);
                 WaitForSingleObject(hThread, 1000);
                 CloseHandle(hThread);
-
                 continue;
             }
 
@@ -585,8 +684,7 @@ int main() {
 
                 SOCKET sock = INVALID_SOCKET;
                 if (!connectToServer(ip, port, sock)) {
-                    std::cout << "Could not connect to server.\n";
-                    std::cout << "Press ENTER...\n";
+                    std::cout << "Could not connect to server.\nPress ENTER...\n";
                     std::string dummy; std::getline(std::cin, dummy);
                     continue;
                 }

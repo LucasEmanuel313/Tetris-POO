@@ -75,6 +75,11 @@ private:
             default: break;
         }
 
+        if (top_reached()) {
+            gameOver = true;
+            return;
+        }
+
         delete current_block;
         current_block = nullptr;
         add_block();
@@ -95,6 +100,13 @@ private:
                     if (positions[x][y] == '#') return true;
                 }
             }
+        }
+        return false;
+    }
+
+    bool top_reached() const {
+        for (int x = 0; x < 10; ++x) {
+            if (positions[x][21] == '#') return true;
         }
         return false;
     }
@@ -127,9 +139,25 @@ public:
         std::cout << "Score: " << score << "\n";
     }
 
+    int get_score() const { return score; }
+
+    // Multiplayer: serializa o tabuleiro (inclui a peça atual, pois ela está em positions)
+    // Formato: 22 linhas (y=0..21) * 10 colunas (x=0..9), '.' vazio, '#' preenchido
+    std::string serialize_board() const {
+        std::string out;
+        out.reserve(10 * 22);
+        for (int y = 0; y < 22; ++y) {
+            for (int x = 0; x < 10; ++x) {
+                out.push_back(positions[x][y] == '#' ? '#' : '.');
+            }
+        }
+        return out;
+    }
+
     
 
     void update_table() {
+        if (!current_block) return;
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
                 if (current_block->piece[i][j] == '#') {
@@ -144,6 +172,7 @@ public:
     }
 
     void block_clear() {
+        if (!current_block) return;
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
                 if (current_block->piece[i][j] == '#') {
@@ -158,6 +187,7 @@ public:
     }
 
     bool can_move(int dx, int dy) {
+        if (!current_block) return false;
         block_clear();
 
         bool ok = true;
@@ -187,16 +217,66 @@ public:
         current_block = new block();
         block_x_pos = 3;
         block_y_pos = 18;
+
+        // se já nasce colidindo com o topo/stack, game over imediato
+        if (collides_here()) {
+            gameOver = true;
+            // ainda desenha a peça que tentou nascer (pra não "sumir")
+            update_table();
+            return;
+        }
         update_table();
     }
 
+    // table.h  (substituir rotate_block das linhas 193–197)
     void rotate_block() {
+        if (!current_block || gameOver) return;
+
+        // remove a peça atual do grid
         block_clear();
+
+        // backup da peça e posição
+        char backup[4][4];
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j)
+                backup[i][j] = current_block->piece[i][j];
+
+        int oldX = block_x_pos;
+        int oldY = block_y_pos;
+
+        // rotaciona
         current_block->rotate();
+
+        // tenta "kicks" (0, empurra pra esquerda, depois direita)
+        const int kicks[] = { 0, -1, -2, -3, 1, 2, 3 };
+        bool ok = false;
+
+        for (int k = 0; k < (int)(sizeof(kicks)/sizeof(kicks[0])); ++k) {
+            block_x_pos = oldX + kicks[k];
+            block_y_pos = oldY;
+
+            if (!collides_here()) { // agora só checa colisão/borda
+                ok = true;
+                break;
+            }
+        }
+
+        if (!ok) {
+            // desfaz rotação + posição
+            block_x_pos = oldX;
+            block_y_pos = oldY;
+            for (int i = 0; i < 4; ++i)
+                for (int j = 0; j < 4; ++j)
+                    current_block->piece[i][j] = backup[i][j];
+        }
+
+        // redesenha a peça (válida ou revertida)
         update_table();
     }
+
 
     void block_descend() {
+        if (!current_block || gameOver) return;
         if (can_move(0, -1)) {
             block_clear();
             block_y_pos -= 1;
@@ -207,6 +287,7 @@ public:
     }
 
     void block_left() {
+        if (!current_block || gameOver) return;
         if (can_move(-1, 0)) {
             block_clear();
             block_x_pos -= 1;
@@ -215,6 +296,7 @@ public:
     }
 
     void block_right() {
+        if (!current_block || gameOver) return;
         int rightCol = right_most_col_of_piece();
         int globalRight = block_x_pos + rightCol;
         if (globalRight >= 9) return;
@@ -227,6 +309,7 @@ public:
     }
 
     void block_drop() {
+        if (!current_block || gameOver) return;
         while (can_move(0, -1)) {
             block_clear();
             block_y_pos -= 1;
@@ -261,6 +344,8 @@ public:
         }
 
         update_table();
+
+        if (top_reached()) gameOver = true;
     }
 
     // --- Multiplayer hook: quantas linhas limpei desde a última leitura ---
