@@ -102,26 +102,28 @@ class block {
         std::cout << "Block: Column " << i << " lowest block found at row: " << profile[i] << std::endl;
     }
 }
-        void rotate(){
-            char temp[4][4];
-            for (size_t i = 0; i < 4; i++) {
-                for (size_t j = 0; j < 4; j++) {
-                    temp[i][j] = piece[i][j];
-                }
-            }
-            for (size_t i = 0; i < 4; i++) {
-                for (size_t j = 0; j < 4; j++) {
-                    piece[i][j] = temp[3-j][i];
-                }
+   
+
+    void rotate(){
+        char temp[4][4];
+        for (size_t i = 0; i < 4; i++) {
+            for (size_t j = 0; j < 4; j++) {
+                temp[i][j] = piece[i][j];
             }
         }
-        block(const char init[4][4]){
-            for (size_t i = 0; i < 4; i++) {
-                for (size_t j = 0; j < 4; j++) {
-                    piece[i][j] = init[i][j];
-                }
+        for (size_t i = 0; i < 4; i++) {
+            for (size_t j = 0; j < 4; j++) {
+                piece[i][j] = temp[3-j][i];
             }
         }
+    }
+    block(const char init[4][4]){
+        for (size_t i = 0; i < 4; i++) {
+            for (size_t j = 0; j < 4; j++) {
+                piece[i][j] = init[i][j];
+            }
+        }
+    }
         block(){
             srand(static_cast<unsigned int>(time(0))); // Inicializa a semente do gerador de números aleatórios
             int random_index = rand() % 7; // Gera um índice aleatório entre 0 e 6

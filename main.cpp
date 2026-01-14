@@ -1,20 +1,9 @@
 #include <iostream>
 #include <chrono>
 #include <SFML/Graphics.hpp>
-
-#include "block.h"
 #include "table.h"
 #include "Game.h"
 
-#define WINDOW_WIDTH 1200
-#define WINDOW_HEIGHT 800
-#define NEXT_BLOCK_MENU_WIDTH 200
-#define NEXT_BLOCK_MENU_HEIGHT 200
-#define GRID_COLS 10
-#define GRID_ROWS 22
-#define GRID_POS_X 300
-#define GRID_POS_Y 50
-#define BLOCK_SIZE 30.f
 
 int main() {
     using clock = std::chrono::steady_clock;
@@ -45,11 +34,11 @@ int main() {
         }
 
         // --- C) RENDERIZAÇÃO ---
-        game.draw_grid();
+        game.draw_game();
 
         // Desenha os blocos do jogo 
         // Nota: Certifique-se que sua classe 'table' desenha algo na janela via ta.setGameWindow
-        ta.print_table(); 
+        //ta.print_table(); 
 
         window.display();
     }

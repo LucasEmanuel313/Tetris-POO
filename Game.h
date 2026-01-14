@@ -11,10 +11,14 @@
 #define GRID_POS_Y 50
 #define BLOCK_SIZE 30.f
 
+sf::Font font("Tetris.ttf");
+sf::Text scoreText(font, "Score: 0", 24);
 class Game {
     // Game class implementation
     sf::RectangleShape grid[GRID_COLS][GRID_ROWS];
+    sf::RectangleShape rectangle;
     sf::RenderWindow window;
+    
     table* game_table;
     private:
 
@@ -32,21 +36,19 @@ class Game {
         }
     }
     void create_next_block_menu() {
-        //Draws the next block menu rectangle
-        sf::RectangleShape rectangle({NEXT_BLOCK_MENU_WIDTH, NEXT_BLOCK_MENU_HEIGHT});
-        sf::Color rectangleColor(150, 150, 150);
+        sf::Color rectangleColor(100, 100, 100);
+        rectangle.setSize({NEXT_BLOCK_MENU_WIDTH, NEXT_BLOCK_MENU_HEIGHT});
         rectangle.setPosition({GRID_POS_X + GRID_COLS * BLOCK_SIZE + 20.f, GRID_POS_Y});
         rectangle.setOutlineThickness(2.f);
         rectangle.setOutlineColor(sf::Color(0, 0, 0));
         rectangle.setFillColor(rectangleColor);
-        window.draw(rectangle);
     }
 
     
     public:
     void draw_grid() {
     window.clear(sf::Color(100, 100, 100)); // Fundo cinza médio
-
+    
     for (int j = 0; j < GRID_ROWS; j++) {
         for (int i = 0; i < GRID_COLS; i++) {
             // 1. Acessa o conteúdo da célula na lógica
@@ -62,9 +64,9 @@ class Game {
             // 3. CORREÇÃO DA POSIÇÃO (Inversão de Y)
             // SFML (0,0) é o topo. Se j=0 (chão), queremos desenhar no fundo da tela.
             // O cálculo (GRID_ROWS - 1 - j) inverte o eixo vertical.
-            float x_pos = i * BLOCK_SIZE;
-            float y_pos = (GRID_ROWS - 1 - j) * BLOCK_SIZE;
-            
+            float x_pos = GRID_POS_X + i * BLOCK_SIZE;
+            float y_pos = GRID_POS_Y + (GRID_ROWS - 1 - j) * BLOCK_SIZE;
+
             grid[i][j].setPosition({x_pos, y_pos});
 
             // 4. Desenha o quadrado na janela
@@ -72,6 +74,38 @@ class Game {
         }
     }
 }
+    void draw_next_block_menu() {
+        window.draw(rectangle);
+        block* nextBlock = game_table->get_next_block();
+        for(int i = 0; i < 4; ++i) {
+            for(int j = 0; j < 4; ++j) {
+                if(nextBlock->piece[i][j] == '#') {
+                    sf::RectangleShape blockShape;
+                    blockShape.setSize({BLOCK_SIZE, BLOCK_SIZE});
+                    blockShape.setFillColor(sf::Color::Red);
+                    blockShape.setOutlineThickness(2.f);
+                    blockShape.setOutlineColor(sf::Color(0, 0, 0));
+                    float x_pos = GRID_POS_X + GRID_COLS * BLOCK_SIZE + 20.f + i * BLOCK_SIZE;
+                    float y_pos = GRID_POS_Y + j * BLOCK_SIZE;
+                    blockShape.setPosition({x_pos, y_pos});
+                    window.draw(blockShape);
+                }
+            }
+        }
+    }
+
+    void draw_score(int score) {
+        scoreText.setString("Score: " + std::to_string(score));
+        scoreText.setPosition({GRID_POS_X + BLOCK_SIZE * 10 + 20.f, GRID_POS_Y + 250.f});
+        scoreText.setFillColor(sf::Color::Black);
+        window.draw(scoreText);
+    }
+    
+    void draw_game() {
+        draw_grid();
+        draw_next_block_menu();
+        draw_score(game_table->get_score());
+    }
 
     void HandleEvents() {
         while (auto event = window.pollEvent()) {
@@ -99,6 +133,7 @@ class Game {
 {
     window.setFramerateLimit(60);
     create_grid();
+    create_next_block_menu();
 }
 
     Game() {
