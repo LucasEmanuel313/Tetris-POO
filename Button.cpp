@@ -6,14 +6,15 @@
 Button::Button(sf::Text text){
   button_shape = new sf::RectangleShape();
   font = new sf::Font();
-  button_text = text;
+  button_text = std::move(text);
   set_values();
 }
 
 Button::Button(){
   button_shape = new sf::RectangleShape();
-  font = new sf::Font("Tetris.ttf");
-  button_text.setString("Close");
+  font = new sf::Font();
+  font->openFromFile("Tetris.ttf");
+  button_text.emplace(*font, "Close", 20U);
 
   set_values();
 }
@@ -31,10 +32,14 @@ void Button::set_values(){
     button_shape->setFillColor(rectangleColor);
 
 
-    button_text.setFont(*font);
-    button_text.setPosition(button_shape->getPosition() + sf::Vector2f(10.f, 10.f));   
-    button_text.setString("Close");
-    button_text.setCharacterSize(20);
+    if (!button_text.has_value()) {
+      button_text.emplace(*font, "Close", 20U);
+    }
+
+    button_text->setFont(*font);
+    button_text->setPosition(button_shape->getPosition() + sf::Vector2f(10.f, 10.f));   
+    button_text->setString("Close");
+    button_text->setCharacterSize(20);
 }
 
 

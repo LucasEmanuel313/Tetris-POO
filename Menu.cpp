@@ -1,7 +1,5 @@
 #include "Menu.h"
 
-sf::Event event(sf::Event::MouseButtonPressed);
-
 Menu::Menu(){
   window = new sf::RenderWindow();
   winclose = new sf::RectangleShape();
@@ -35,18 +33,18 @@ void Menu::set_values(){
   mouse_coord = {0, 0};
 
   options = {"War Game", "Play", "Options", "About", "Quit"};
-  texts.resize(5);
+  texts.clear();
+  texts.reserve(options.size());
   coords = {{590,40},{610,191},{590,282},{600,370},{623,457}};
   sizes = {20,28,24,24,24};
 
-  for (std::size_t i{}; i < texts.size(); ++i){
-   texts[i].setFont(*font); 
-   texts[i].setString(options[i]); 
-   texts[i].setCharacterSize(sizes[i]);
-   texts[i].setOutlineColor(sf::Color::Black);
-   texts[i].setPosition(coords[i]);
+  for (std::size_t i{}; i < options.size(); ++i){
+    sf::Text t(*font, options[i], static_cast<unsigned int>(sizes[i]));
+    t.setOutlineColor(sf::Color::Black);
+    t.setPosition(coords[i]);
+    texts.push_back(std::move(t));
   }
-  texts[1].setOutlineThickness(4);
+  texts.at(1).setOutlineThickness(4);
   pos = 1;
 
   winclose->setSize(sf::Vector2f(23,26));
@@ -57,7 +55,8 @@ void Menu::set_values(){
 
 void Menu::loop_events(){
   
-  while(window->pollEvent()){
+  while (const auto event = window->pollEvent()){
+    (void)event;
     
 
     pos_mouse = sf::Mouse::getPosition(*window);
