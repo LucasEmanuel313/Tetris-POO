@@ -94,6 +94,10 @@ class Button {
         isPressedInside = false;
       }
     }
+    void setPosition(sf::Vector2f position){
+      button_shape.setPosition(position);
+      button_text.setPosition({position.x + 30.f, position.y + 10.f});
+    }
     bool getOnRelease(){
       return onRelease;
     }
