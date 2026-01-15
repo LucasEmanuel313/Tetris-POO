@@ -1,4 +1,8 @@
 #include <SFML/Graphics.hpp>
+#include <iostream>
+#include "Button.h"
+#include "Game.h"
+//#include "Mouse.h"
 
 
 #define WINDOW_WIDTH 1200
@@ -11,33 +15,59 @@
 #define GRID_POS_Y 50
 #define BLOCK_SIZE 30.f
 
+enum class GameState {
+    MENU,
+    SINGLEPLAYER,
+    MULTIPLAYER,
+    GAME,
+    GAME_OVER,
+    PAUSE
+};
+
+class WindowManager {
+private:
+    sf::RenderWindow window;
+    GameState current_state;
+    
+public:
+    WindowManager() : window(sf::VideoMode({1200, 800}), "Tetris") {
+        window.setFramerateLimit(60);
+        current_state = GameState::MENU;
+    }
+    
+    void setState(GameState state) { current_state = state; }
+    GameState getState() const { return current_state; }
+    
+    sf::RenderWindow& getWindow() { return window; }
+    bool isOpen() { return window.isOpen(); }
+};
+
 int main()
 {
+    WindowManager windowManager;
+    sf::RenderWindow& window = windowManager.getWindow();
 
-    sf::RenderWindow window(sf::VideoMode({WINDOW_WIDTH, WINDOW_HEIGHT}), "Title");
+    GameState current_state = GameState::MENU;
 
-    sf::RectangleShape grid[GRID_COLS][GRID_ROWS];
-    
-    for (int i = 0; i < GRID_COLS; ++i)
-    {
-        for (int j = 0; j < GRID_ROWS; ++j)
-        {
-            grid[i][j].setSize({BLOCK_SIZE, BLOCK_SIZE});
-            grid[i][j].setFillColor(sf::Color::White);
-            grid[i][j].setOutlineThickness(2.f);
-            grid[i][j].setOutlineColor(sf::Color(0, 0, 0));
-            grid[i][j].setPosition({GRID_POS_X + i * BLOCK_SIZE, GRID_POS_Y + j * BLOCK_SIZE});
-        }
+    table ta;
+    ta.add_block();
+    Game singleplayer(&ta, windowManager.getWindow());
+
+    Mouse mouse;
+    sf::Font font;
+    if (!font.openFromFile("Tetris.ttf")) {
+        std::cerr << "Error loading Tetris.ttf\n";
+        return 1;
     }
-    //Draws the next block menu rectangle
-    sf::RectangleShape rectangle({NEXT_BLOCK_MENU_WIDTH, NEXT_BLOCK_MENU_HEIGHT});
-    sf::Color rectangleColor(150, 150, 150);
-    rectangle.setPosition({GRID_POS_X + GRID_COLS * BLOCK_SIZE + 20.f, GRID_POS_Y});
-    rectangle.setOutlineThickness(2.f);
-    rectangle.setOutlineColor(sf::Color(0, 0, 0));
-    rectangle.setFillColor(rectangleColor);
+
+    Button button(font, {200.f, 50.f}, "Single Player"  );
+    Button button2(font, {200.f, 150.f}, "Multiplayer"  );
+    Button button3(font, {200.f, 250.f}, "Exit"  );
+
+   
     while (window.isOpen())
     {
+        // Processar eventos
         while (auto event = window.pollEvent())
         {
             if (event->is<sf::Event::Closed>())
@@ -46,19 +76,40 @@ int main()
             }
         }
 
-        window.clear(sf::Color(255, 255, 255));
-        for(int i = 0; i < 10; ++i)
-        {
-            for (int j = 0; j < 22; ++j)
-            {
-                window.draw(grid[i][j]);
-            }
+        // Atualizar mouse
+        mouse.Update(window);
+        button.Update(mouse);
+        button2.Update(mouse);
+        button3.Update(mouse);
+
+        // Processar input de botões
+        if(button.getOnRelease()){
+            current_state = GameState::SINGLEPLAYER;
+            std::cout << "Single Player pressed\n";
         }
-        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
-        {
-            rectangle.move({-1 * BLOCK_SIZE, 0});
+        if(button2.getOnRelease()){
+            current_state = GameState::MULTIPLAYER;
+            std::cout << "Multiplayer pressed\n";
         }
-        window.draw(rectangle);
+        if(button3.getOnRelease()){
+            window.close();
+        }
+
+        // Limpar a tela
+        window.clear(sf::Color::White);
+
+        // Desenhar baseado no estado
+        if(current_state == GameState::MENU){
+            button.draw_button(window);
+            button2.draw_button(window);
+            button3.draw_button(window);
+        }
+        if(current_state == GameState::SINGLEPLAYER){
+            singleplayer.HandleEvents();
+            singleplayer.draw_screen();
+        }
+        
+        // Exibir frame
         window.display();
     }
 
