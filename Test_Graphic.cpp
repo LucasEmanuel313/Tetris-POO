@@ -60,9 +60,15 @@ int main()
         return 1;
     }
 
+    // Centralizar botões: largura 200, então x = (1200 - 200) / 2 = 500
     Button button(font, {200.f, 50.f}, "Single Player"  );
     Button button2(font, {200.f, 150.f}, "Multiplayer"  );
     Button button3(font, {200.f, 250.f}, "Exit"  );
+    
+    // Posicionar botões centralizados
+    button.setPosition({500.f, 250.f});
+    button2.setPosition({500.f, 350.f});
+    button3.setPosition({500.f, 450.f});
 
    
     while (window.isOpen())
@@ -106,7 +112,7 @@ int main()
         }
         if(current_state == GameState::SINGLEPLAYER){
             singleplayer.HandleEvents();
-            singleplayer.draw_screen();
+            singleplayer.draw_game();
         }
         
         // Exibir frame

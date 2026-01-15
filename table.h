@@ -14,6 +14,7 @@ private:
     char positions[10][22];   // 10 colunas, 22 linhas (0..21)
     int  profile[10];
     block* current_block;
+    block* next_block;
     int block_x_pos;          // posição (coluna) do canto inferior-esquerdo da peça 4x4
     int block_y_pos;          // posição (linha) do canto inferior-esquerdo da peça 4x4
 
@@ -182,11 +183,16 @@ public:
 
     // cria uma nova peça no topo
     void add_block() {
-        current_block = new block();
+        current_block = next_block;
+        next_block = new block();
         block_x_pos   = 3;
         block_y_pos   = 18; // 18..21 dentro da área 4x4
         // se já houver blocos lá, você pode adicionar lógica de "game over"
         update_table();
+    }
+
+    block* get_next_block() const {
+        return next_block;
     }
 
     void rotate_block() {
@@ -252,7 +258,8 @@ public:
                 positions[i][j] = ' ';
             }
         }
-        current_block = nullptr;
+        current_block = new block();
+        next_block = new block();
         block_x_pos = 0;
         block_y_pos = 0;
         score = 0;
