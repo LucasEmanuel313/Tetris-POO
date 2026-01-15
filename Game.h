@@ -14,7 +14,7 @@
 class Game {
     // Game class implementation
     sf::RectangleShape grid[GRID_COLS][GRID_ROWS];
-    sf::RenderWindow window;
+    sf::RenderWindow * window;
     table* game_table;
     private:
 
@@ -39,76 +39,59 @@ class Game {
         rectangle.setOutlineThickness(2.f);
         rectangle.setOutlineColor(sf::Color(0, 0, 0));
         rectangle.setFillColor(rectangleColor);
-        window.draw(rectangle);
+        window->draw(rectangle);
     }
 
     
     public:
     void draw_grid() {
-    window.clear(sf::Color(100, 100, 100)); // Fundo cinza médio
+        for (int j = 0; j < GRID_ROWS; j++) {
+            for (int i = 0; i < GRID_COLS; i++) {
+                // 1. Acessa o conteúdo da célula na lógica
+                char cell = game_table->get_cell(i, j); 
 
-    for (int j = 0; j < GRID_ROWS; j++) {
-        for (int i = 0; i < GRID_COLS; i++) {
-            // 1. Acessa o conteúdo da célula na lógica
-            char cell = game_table->get_cell(i, j); 
-
-            // 2. Define a cor baseada no conteúdo
-            if (cell == '#') {
-                grid[i][j].setFillColor(sf::Color::Blue);
-            } else {
-                grid[i][j].setFillColor(sf::Color::White);
-            }
-
-            // 3. CORREÇÃO DA POSIÇÃO (Inversão de Y)
-            // SFML (0,0) é o topo. Se j=0 (chão), queremos desenhar no fundo da tela.
-            // O cálculo (GRID_ROWS - 1 - j) inverte o eixo vertical.
-            float x_pos = i * BLOCK_SIZE;
-            float y_pos = (GRID_ROWS - 1 - j) * BLOCK_SIZE;
-            
-            grid[i][j].setPosition({x_pos, y_pos});
-
-            // 4. Desenha o quadrado na janela
-            window.draw(grid[i][j]);
-        }
-    }
-}
-
-    void HandleEvents() {
-        while (auto event = window.pollEvent()) {
-            if (event->is<sf::Event::Closed>()) {
-                window.close();
-            }
-
-            // Captura de teclas únicas (pressionou uma vez, executa uma vez)
-            if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
-                switch (keyPressed->code) {
-                    case sf::Keyboard::Key::Left:     game_table->block_left();    break;
-                    case sf::Keyboard::Key::Right:     game_table->block_right();   break;
-                    case sf::Keyboard::Key::Down:     game_table->block_descend(); break;
-                    case sf::Keyboard::Key::Up:     game_table->rotate_block();  break;
-                    case sf::Keyboard::Key::Space: game_table->block_drop();    break;
-                    default: break;
+                // 2. Define a cor baseada no conteúdo
+                if (cell == '#') {
+                    grid[i][j].setFillColor(sf::Color::Blue);
+                } else {
+                    grid[i][j].setFillColor(sf::Color::White);
                 }
+
+                // 3. CORREÇÃO DA POSIÇÃO (Inversão de Y)
+                // SFML (0,0) é o topo. Se j=0 (chão), queremos desenhar no fundo da tela.
+                // O cálculo (GRID_ROWS - 1 - j) inverte o eixo vertical.
+                float x_pos = i * BLOCK_SIZE;
+                float y_pos = (GRID_ROWS - 1 - j) * BLOCK_SIZE;
+                
+                grid[i][j].setPosition({x_pos, y_pos});
+
+                // 4. Desenha o quadrado na janela
+                window->draw(grid[i][j]);
             }
         }
     }
+    void HandleEvents() {
+        // TODO: Implementar manipulação de eventos
+    }
 
-    Game(table* t) : 
-    game_table(t), 
-    window(sf::VideoMode({WINDOW_WIDTH, WINDOW_HEIGHT}), "Tetris SFML") // Inicializa direto
-{
-    window.setFramerateLimit(60);
-    create_grid();
-}
+    Game(table* t, sf::RenderWindow& win) : window(&win), game_table(t) {
+        window->setFramerateLimit(60);
+        create_grid();
+    }
+
+    void draw_screen() {
+        create_next_block_menu();
+        draw_grid();
+    }
 
     Game() {
-        window.create(sf::VideoMode({WINDOW_WIDTH, WINDOW_HEIGHT}), "Tetris SFML");
-        window.setFramerateLimit(60); // Limita o FPS para não sobrecarregar a CPU
+        //window.create(sf::VideoMode({WINDOW_WIDTH, WINDOW_HEIGHT}), "Tetris SFML");
+        window->setFramerateLimit(60); // Limita o FPS para não sobrecarregar a CPU
         create_grid();
         create_next_block_menu();
     }
 
     sf::RenderWindow& getWindow() {
-        return window;
+        return *window;
     }
 };
