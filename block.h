@@ -7,7 +7,7 @@
 
 const char PIECE_I[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', '#', '#'}, // Quatro blocos em linha
+    {'C', 'C', 'C', 'C'}, // Quatro blocos em linha
     {' ', ' ', ' ', ' '},
     {' ', ' ', ' ', ' '}
 };
@@ -15,48 +15,48 @@ const char PIECE_I[4][4] = {
 // Peça J (Jota)
 const char PIECE_J[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', '#', ' '},
-    {' ', ' ', '#', ' '}, // O 'canto' no topo direito
+    {'P', 'P', 'P', ' '},
+    {' ', ' ', 'P', ' '}, // O 'canto' no topo direito
     {' ', ' ', ' ', ' '}
 };
 
 // Peça L (Éle)
 const char PIECE_L[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', '#', ' '},
-    {'#', ' ', ' ', ' '}, // O 'canto' no topo esquerdo
+    {'O', 'O', 'O', ' '},
+    {'O', ' ', ' ', ' '}, // O 'canto' no topo esquerdo
     {' ', ' ', ' ', ' '}
 };
 
 // Peça O (Quadrado)
 const char PIECE_O[4][4] = {
     {' ', ' ', ' ', ' '},
-    {' ', '#', '#', ' '},
-    {' ', '#', '#', ' '}, // 2x2 centralizado
+    {' ', 'Y', 'Y', ' '},
+    {' ', 'Y', 'Y', ' '}, // 2x2 centralizado
     {' ', ' ', ' ', ' '}
 };
 
 // Peça S (Ese)
 const char PIECE_S[4][4] = {
     {' ', ' ', ' ', ' '},
-    {' ', '#', '#', ' '},
-    {'#', '#', ' ', ' '}, // Forma de Z (ou S)
+    {' ', 'R', 'R', ' '},
+    {'R', 'R', ' ', ' '}, // Forma de Z (ou S)
     {' ', ' ', ' ', ' '}
 };
 
 // Peça T (Tê)
 const char PIECE_T[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', '#', ' '},
-    {' ', '#', ' ', ' '}, // Bloco extra no meio
+    {'M', 'M', 'M', ' '},
+    {' ', 'M', ' ', ' '}, // Bloco extra no meio
     {' ', ' ', ' ', ' '}
 };
 
 // Peça Z (Zeta)
 const char PIECE_Z[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', ' ', ' '},
-    {' ', '#', '#', ' '}, // Forma de S (ou Z)
+    {'B', 'B', ' ', ' '},
+    {' ', 'B', 'B', ' '}, // Forma de S (ou Z)
     {' ', ' ', ' ', ' '}
 };
 
@@ -88,7 +88,7 @@ class block {
         for (int j = 0; j < 4; j++) { 
             
             // Verifica se a posição atual [Linha j][Coluna i] tem um bloco
-            if (piece[i][j] == '#') {
+            if (piece[i][j] != ' ') {
                 
                 // Armazena a linha j (o bdloco MAIS BAIXO) como o perfil
                 profile[i] = j; 

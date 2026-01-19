@@ -25,7 +25,7 @@ private:
         int maxCol = 0;
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
-                if (current_block->piece[i][j] == '#') {
+                if (current_block->piece[i][j] != ' ') {
                     if (i > maxCol) maxCol = i;
                 }
             }
@@ -42,7 +42,7 @@ private:
 
         for (int i = 0; i < 4 && ok; ++i) {
             for (int j = 0; j < 4 && ok; ++j) {
-                if (current_block->piece[i][j] == '#') {
+                if (current_block->piece[i][j] != ' ') {
                     int newX = block_x_pos + dx + i;
                     int newY = block_y_pos + dy + j;
 
@@ -53,7 +53,7 @@ private:
                     }
 
                     // colisão com blocos já existentes
-                    if (positions[newX][newY] == '#') {
+                    if (positions[newX][newY] != ' ') {
                         ok = false;
                         break;
                     }
@@ -87,7 +87,7 @@ private:
         for (int y = 0; y < 22; ++y) {
             bool full = true;
             for (int x = 0; x < 10; ++x) {
-                if (positions[x][y] != '#') {
+                if (positions[x][y] == ' ') {
                     full = false;
                     break;
                 }
@@ -146,7 +146,7 @@ public:
         for (int i = 0; i < 10; i++) {
             profile[i] = 0;
             for (int j = 21; j >= 0 && profile[i] == 0; j--) {
-                if (positions[i][j] == '#') {
+                if (positions[i][j] != ' ') {
                     profile[i] = j;
                     break;
                 }
@@ -162,8 +162,8 @@ public:
     void update_table() {
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
-                if (current_block->piece[i][j] == '#') {
-                    positions[block_x_pos + i][block_y_pos + j] = '#';
+                if (current_block->piece[i][j] != ' ') {
+                    positions[block_x_pos + i][block_y_pos + j] = current_block->piece[i][j];
                 }
             }
         }
@@ -174,7 +174,7 @@ public:
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
                 // só limpa as células onde há bloco da peça
-                if (current_block->piece[i][j] == '#') {
+                if (current_block->piece[i][j] != ' ') {
                     positions[block_x_pos + i][block_y_pos + j] = ' ';
                 }
             }
