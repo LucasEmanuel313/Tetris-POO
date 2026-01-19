@@ -49,7 +49,7 @@ class Button {
     };
 
   public:
-    Button(sf::Font font, sf::Vector2f position, std::string text) : button_text(font) {
+    Button(const sf::Font& font, sf::Vector2f position, std::string text) : button_text(font) {
         button_shape.setPosition(position);
         button_text.setPosition({position.x + 30.f, position.y + 10.f});
         button_text.setString(text);

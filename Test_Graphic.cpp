@@ -15,14 +15,7 @@
 #define GRID_POS_Y 50
 #define BLOCK_SIZE 30.f
 
-enum class GameState {
-    MENU,
-    SINGLEPLAYER,
-    MULTIPLAYER,
-    GAME,
-    GAME_OVER,
-    PAUSE
-};
+#include "GameState.h"
 
 class WindowManager {
 private:

@@ -14,14 +14,12 @@
 #define GRID_POS_Y 50
 #define NEXT_BLOCK_POS_X (GRID_POS_X + GRID_WIDTH + 20.f)
 
-sf::Font font("Tetris.ttf");
-sf::Text scoreText(font, "Score: 0", 24);
-
 class Game {
     // Game class implementation
     sf::RectangleShape grid[GRID_COLS][GRID_ROWS];
     sf::RenderWindow * window;
     sf::RectangleShape rectangle;
+    const sf::Font* font;
     table* game_table;
     
     // Rastrear estado anterior das teclas
@@ -29,6 +27,19 @@ class Game {
     // 0=Left, 1=Right, 2=Down, 3=Up, 4=Space
     
     private:
+
+    sf::Color get_color_for_cell(char cell) {
+        switch (cell) {
+            case 'C': return sf::Color(0, 150, 150);     // Cyan Escuro
+            case 'Y': return sf::Color(180, 180, 0);     // Amarelo Escuro
+            case 'M': return sf::Color(150, 0, 150);     // Magenta Escuro
+            case 'P': return sf::Color(0, 128, 0);       // Verde Escuro (Dark Green)
+            case 'R': return sf::Color(150, 0, 0);       // Vermelho Escuro
+            case 'B': return sf::Color(0, 0, 150);       // Azul Escuro
+            case 'O': return sf::Color(180, 100, 0);     // Laranja Escuro
+            default:  return sf::Color(40, 40, 40);      // Vazio: Cinza muito escuro (melhor que branco para o tema)
+        }
+    }
 
     void create_grid() {
         for (int i = 0; i < GRID_COLS; ++i)
@@ -62,8 +73,8 @@ class Game {
                 char cell = game_table->get_cell(i, j); 
 
                 // 2. Define a cor baseada no conteúdo
-                if (cell == '#') {
-                    grid[i][j].setFillColor(sf::Color::Blue);
+                if (cell != ' ') {
+                    grid[i][j].setFillColor(get_color_for_cell(cell));
                 } else {
                     grid[i][j].setFillColor(sf::Color::White);
                 }
@@ -86,10 +97,11 @@ class Game {
         block* nextBlock = game_table->get_next_block();
         for(int i = 0; i < 4; ++i) {
             for(int j = 0; j < 4; ++j) {
-                if(nextBlock->piece[i][j] == '#') {
+                if(nextBlock->piece[i][j] != ' ') {
                     sf::RectangleShape blockShape;
                     blockShape.setSize({BLOCK_SIZE, BLOCK_SIZE});
-                    blockShape.setFillColor(sf::Color::Red);
+                    // Define a cor baseada no tipo de peça
+                    blockShape.setFillColor(get_color_for_cell(nextBlock->piece[i][j]));
                     blockShape.setOutlineThickness(2.f);
                     blockShape.setOutlineColor(sf::Color(0, 0, 0));
                     float x_pos = NEXT_BLOCK_POS_X + i * BLOCK_SIZE;
@@ -137,9 +149,11 @@ class Game {
     }
 
     void draw_score(int score) {
+        sf::Text scoreText(*font);
         scoreText.setString("Score: " + std::to_string(score));
         scoreText.setPosition({NEXT_BLOCK_POS_X, GRID_POS_Y + 250.f});
         scoreText.setFillColor(sf::Color::Red);
+        scoreText.setCharacterSize(20);
         window->draw(scoreText);
     }
     
@@ -150,18 +164,10 @@ class Game {
         draw_score(game_table->get_score());
     }
 
-    Game(table* t, sf::RenderWindow& win) : window(&win), game_table(t) {
+    Game(table* t, sf::RenderWindow& win, const sf::Font& f) : window(&win), game_table(t), font(&f) {
         create_next_block_menu();
         window->setFramerateLimit(60);
         create_grid();
-    }
-
-
-    Game() {
-        //window.create(sf::VideoMode({WINDOW_WIDTH, WINDOW_HEIGHT}), "Tetris SFML");
-        window->setFramerateLimit(60); // Limita o FPS para não sobrecarregar a CPU
-        create_grid();
-        create_next_block_menu();
     }
 
     sf::RenderWindow& getWindow() {
