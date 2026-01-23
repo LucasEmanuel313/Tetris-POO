@@ -11,28 +11,32 @@ class MusicManager {
 private:
     sf::Music music;
     std::string currentFilePath;
+    bool isPlaying = true;
 
 public:
     MusicManager() : currentFilePath("") {}
 
     void updateMusic(GameState state) {
         std::string musicFilePath;
-
-        switch (state) {
-            case GameState::MENU:
-                musicFilePath = "Music/Main_Menu_Music.ogg";
-                break;
-            case GameState::SINGLEPLAYER:
-                musicFilePath = "Music/Tetris_music.mp3";
-                break;
-            case GameState::MULTIPLAYER:
-                musicFilePath = "Music/Tetris_music.mp3";
-                break;
-            default:
-                stopMusic();
-                return;
+        if (isPlaying) {
+            switch (state) {
+                case GameState::MENU:
+                    musicFilePath = "Music/Main_Menu_Music.ogg";
+                    music.setVolume(50.f);
+                    break;
+                case GameState::SINGLEPLAYER:
+                    musicFilePath = "Music/Tetris_music.mp3";
+                    music.setVolume(50.f);
+                    break;
+                case GameState::MULTIPLAYER:
+                    musicFilePath = "Music/Tetris_music.mp3";
+                    music.setVolume(50.f);
+                    break;
+                default:
+                    stopMusic();
+                    return;
+            }
         }
-
         if (currentFilePath == musicFilePath) return;
 
         if (music.openFromFile(musicFilePath)) {
@@ -46,6 +50,17 @@ public:
         } else {
             std::cerr << "Erro: Nao foi possivel carregar " << musicFilePath << std::endl;
         }
+    }
+
+    void setPlaying(bool play) {
+        isPlaying = play;
+        if (!isPlaying) {
+            stopMusic();
+        }
+    }
+
+    bool getIsPlaying() const {
+        return isPlaying;
     }
 
     void stopMusic() {
