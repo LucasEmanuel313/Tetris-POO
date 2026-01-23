@@ -73,6 +73,11 @@ public:
         PostGame
     };
 
+    enum class MenuPane {
+        Root,
+        JoinForm
+    };
+
 private:
     // UI
     Button hostBtn;
@@ -116,6 +121,8 @@ private:
     Mode mode = Mode::Menu;
     std::string statusLine;
 
+    MenuPane menuPane = MenuPane::Root;
+
     int enterCooldownFrames = 0;
 
     // post game
@@ -141,6 +148,17 @@ private:
         hint.setString(statusLine);
     }
 
+    void applyMenuLayout() {
+        if (menuPane == MenuPane::Root) {
+            hostBtn.setPosition({500.f, 250.f});
+            joinBtn.setPosition({500.f, 330.f});
+            backBtn.setPosition({500.f, 410.f});
+        } else {
+            connectBtn.setPosition({500.f, 410.f});
+            backBtn.setPosition({500.f, 490.f});
+        }
+    }
+
     void startClient(const std::string& ip, int port, bool host) {
         isHost = host;
 
@@ -163,6 +181,7 @@ private:
 
         lastFall = clock::now();
         mode = Mode::Waiting;
+        menuPane = MenuPane::Root;
         setStatus("Conectado. Aguardando oponente...");
     }
 
@@ -342,11 +361,18 @@ public:
     }
 
     void handleEvent(const sf::Event& ev, sf::RenderWindow& window) {
-        ipField.handleEvent(ev, window);
-        portField.handleEvent(ev, window);
+        if (mode == Mode::Menu && menuPane == MenuPane::JoinForm) {
+            ipField.handleEvent(ev, window);
+            portField.handleEvent(ev, window);
+        }
 
         if (const auto* kp = ev.getIf<sf::Event::KeyPressed>()) {
             if (kp->code == sf::Keyboard::Key::Escape) {
+                if (mode == Mode::Menu && menuPane != MenuPane::Root) {
+                    menuPane = MenuPane::Root;
+                    setStatus("Escolha Host ou Join");
+                    return;
+                }
                 // sai do multiplayer
                 if (sock != INVALID_SOCKET) sendLine(sock, "LEAVE");
                 running = false;
@@ -415,36 +441,50 @@ public:
 
         // UI interactions
         if (mode == Mode::Menu) {
+            applyMenuLayout();
             if (enterCooldownFrames > 0) {
                 --enterCooldownFrames;
                 return false;
             }
-            hostBtn.Update(mouse);
-            joinBtn.Update(mouse);
-            backBtn.Update(mouse);
+            if (menuPane == MenuPane::Root) {
+                hostBtn.Update(mouse);
+                joinBtn.Update(mouse);
+                backBtn.Update(mouse);
 
-            if (hostBtn.getOnRelease()) {
-                int port = 5555;
-                try { port = std::stoi(portField.getValue()); } catch (...) {}
-
-                std::string err;
-                if (!startServer(port, server, err)) {
-                    setStatus(err);
-                } else {
-                    hosting = true;
-                    startClient("127.0.0.1", port, true);
-                    setStatus("Sala criada. Aguardando oponente...");
+                if (hostBtn.getOnRelease()) {
+                    const int port = 5555;
+                    std::string err;
+                    if (!startServer(port, server, err)) {
+                        setStatus(err);
+                    } else {
+                        hosting = true;
+                        startClient("127.0.0.1", port, true);
+                        setStatus("Sala criada. Aguardando oponente...");
+                    }
                 }
-            }
 
-            if (joinBtn.getOnRelease()) {
-                int port = 5555;
-                try { port = std::stoi(portField.getValue()); } catch (...) {}
-                startClient(ipField.getValue(), port, false);
-            }
+                if (joinBtn.getOnRelease()) {
+                    menuPane = MenuPane::JoinForm;
+                    setStatus("Digite IP e porta, depois Connect.");
+                }
 
-            if (backBtn.getOnRelease()) {
-                return true;
+                if (backBtn.getOnRelease()) {
+                    return true;
+                }
+            } else {
+                connectBtn.Update(mouse);
+                backBtn.Update(mouse);
+
+                if (connectBtn.getOnRelease()) {
+                    int port = 5555;
+                    try { port = std::stoi(portField.getValue()); } catch (...) {}
+                    startClient(ipField.getValue(), port, false);
+                }
+
+                if (backBtn.getOnRelease()) {
+                    menuPane = MenuPane::Root;
+                    setStatus("Escolha Host ou Join");
+                }
             }
         }
 
@@ -469,26 +509,32 @@ public:
 
     void draw(sf::RenderWindow& window) {
         if (mode == Mode::Menu) {
+            applyMenuLayout();
             window.draw(title);
 
-            sf::Text ipLabel(title);
-            ipLabel.setString("IP:");
-            ipLabel.setCharacterSize(18);
-            ipLabel.setPosition({420.f, 255.f});
-            window.draw(ipLabel);
+            if (menuPane == MenuPane::Root) {
+                hostBtn.draw(window);
+                joinBtn.draw(window);
+                backBtn.draw(window);
+            } else {
+                sf::Text ipLabel(title);
+                ipLabel.setString("IP:");
+                ipLabel.setCharacterSize(18);
+                ipLabel.setPosition({420.f, 255.f});
+                window.draw(ipLabel);
 
-            sf::Text portLabel(title);
-            portLabel.setString("Port:");
-            portLabel.setCharacterSize(18);
-            portLabel.setPosition({420.f, 315.f});
-            window.draw(portLabel);
+                sf::Text portLabel(title);
+                portLabel.setString("Port:");
+                portLabel.setCharacterSize(18);
+                portLabel.setPosition({420.f, 315.f});
+                window.draw(portLabel);
 
-            ipField.draw(window);
-            portField.draw(window);
+                ipField.draw(window);
+                portField.draw(window);
 
-            hostBtn.draw(window);
-            joinBtn.draw(window);
-            backBtn.draw(window);
+                connectBtn.draw(window);
+                backBtn.draw(window);
+            }
         }
         else if (mode == Mode::Waiting) {
             sf::Text t(title);
