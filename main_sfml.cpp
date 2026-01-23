@@ -57,7 +57,7 @@ int main() {
     table ta;
     ta.add_block();
 
-    SfmlGame game(ta, window, font);
+    SfmlGame game(ta, window, font, musicManager);
     MainMenu menu(font);
     SfmlMultiplayer mp(font, window);
     Mouse mouse;

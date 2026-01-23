@@ -16,13 +16,17 @@ public:
 
     static constexpr float BLOCK_SIZE = 30.f;
     static constexpr float GRID_WIDTH = GRID_COLS * BLOCK_SIZE;
+    static constexpr float GRID_HEIGHT = GRID_ROWS * BLOCK_SIZE;
 
     static constexpr float GRID_POS_X = (WINDOW_WIDTH - GRID_WIDTH) / 2.f;
     static constexpr float GRID_POS_Y = 50.f;
 
     static constexpr float PANEL_POS_X = GRID_POS_X + GRID_WIDTH + 20.f;
+    static constexpr float PANEL_WIDTH = 140.f;
+    static constexpr float PANEL_HEIGHT = 400.f;
 
 private:
+    MusicManager * musicManager;
     sf::RectangleShape cells[GRID_COLS][GRID_ROWS];
     table* game_table = nullptr;
     sf::RenderWindow* window = nullptr;
@@ -134,7 +138,7 @@ private:
         // Score
         sf::Text scoreText(*font);
         scoreText.setString("Score: " + std::to_string(game_table->get_score()));
-        scoreText.setPosition({PANEL_POS_X, GRID_POS_Y + 250.f});
+        scoreText.setPosition({PANEL_POS_X + 10.f, GRID_POS_Y + 250.f});
         scoreText.setFillColor(sf::Color::Black);
         scoreText.setCharacterSize(20);
         drawTextWithBox(*window, scoreText);
@@ -142,41 +146,58 @@ private:
         // Hold
         sf::Text holdText(*font);
         holdText.setString("HOLD");
-        holdText.setPosition({PANEL_POS_X, GRID_POS_Y});
+        holdText.setPosition({PANEL_POS_X + 10.f, GRID_POS_Y});
         holdText.setFillColor(sf::Color::Black);
         holdText.setCharacterSize(18);
         drawTextWithBox(*window, holdText);
-        drawMiniPiece(game_table->get_hold_type(), PANEL_POS_X, GRID_POS_Y + 30.f);
-
+        drawMiniPiece(game_table->get_hold_type(), PANEL_POS_X + PANEL_WIDTH / 2 - BLOCK_SIZE * 2, GRID_POS_Y + 30.f);
         // Next
         sf::Text nextText(*font);
         nextText.setString("NEXT");
-        nextText.setPosition({PANEL_POS_X, GRID_POS_Y + 180.f});
+        nextText.setPosition({PANEL_POS_X + 10.f, GRID_POS_Y + 180.f});
         nextText.setFillColor(sf::Color::Black);
         nextText.setCharacterSize(18);
         drawTextWithBox(*window, nextText);
 
         auto next = game_table->get_next_types(3);
-        for (size_t i = 0; i < next.size(); ++i) {
-            drawMiniPiece(next[i], PANEL_POS_X, GRID_POS_Y + 210.f + (float)i * 140.f);
+        drawMiniPiece(next[0], PANEL_POS_X + PANEL_WIDTH / 2 - BLOCK_SIZE * 2, GRID_POS_Y + 50.f);
+        for (size_t i = 1; i < next.size(); ++i) {
+            drawMiniPiece(next[i], PANEL_POS_X + PANEL_WIDTH / 2 - BLOCK_SIZE * 2, GRID_POS_Y + 170.f + (float)i * 140.f);
         }
     }
 
+    void drawPanelBox() {
+        sf::RectangleShape box;
+        box.setPosition({PANEL_POS_X, GRID_POS_Y});
+        box.setSize({PANEL_WIDTH, GRID_HEIGHT});
+        box.setFillColor(sf::Color(220, 220, 220));
+        box.setOutlineThickness(3.f);
+        box.setOutlineColor(sf::Color::Black);
+        window->draw(box);
+    }
+
 public:
+    SfmlGame(table& t, sf::RenderWindow& w, const sf::Font& f, MusicManager& mm)
+        : game_table(&t), window(&w), font(&f), musicManager(&mm) {
+        initGrid();
+        window->setFramerateLimit(60);
+    }
+
     SfmlGame(table& t, sf::RenderWindow& w, const sf::Font& f)
-        : game_table(&t), window(&w), font(&f) {
+        : game_table(&t), window(&w), font(&f){
         initGrid();
         window->setFramerateLimit(60);
     }
 
     void HandleEvents() {
-        bool currentKeyStates[6] = {
+        bool currentKeyStates[7] = {
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left),
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right),
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down),
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up),
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space),
-            sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C)
+            sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C),
+            sf::Keyboard::isKeyPressed(sf::Keyboard::Key::P)
         };
 
         if (!prevKeyStates[0] && currentKeyStates[0]) game_table->block_left();
@@ -185,8 +206,9 @@ public:
         if (!prevKeyStates[3] && currentKeyStates[3]) game_table->rotate_block();
         if (!prevKeyStates[4] && currentKeyStates[4]) game_table->block_drop();
         if (!prevKeyStates[5] && currentKeyStates[5]) game_table->hold_block();
+        if (!prevKeyStates[6] && currentKeyStates[6]) musicManager->setPlaying(!(musicManager->getIsPlaying()));
 
-        for (int i = 0; i < 6; ++i) prevKeyStates[i] = currentKeyStates[i];
+        for (int i = 0; i < 7; ++i) prevKeyStates[i] = currentKeyStates[i];
 
         // se a peça travou, a mesa marca needsSpawn
         game_table->spawn_if_needed();
@@ -194,6 +216,7 @@ public:
 
     void draw_game() {
         drawBoard();
+        drawPanelBox();
         drawSidePanels();
     }
 };
