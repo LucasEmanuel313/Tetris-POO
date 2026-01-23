@@ -4,6 +4,7 @@
 
 #include "block.h"
 #include "table.h"
+#include "UiTextBox.h"
 
 class SfmlGame {
 public:
@@ -134,9 +135,9 @@ private:
         sf::Text scoreText(*font);
         scoreText.setString("Score: " + std::to_string(game_table->get_score()));
         scoreText.setPosition({PANEL_POS_X, GRID_POS_Y + 250.f});
-        scoreText.setFillColor(sf::Color::Red);
+        scoreText.setFillColor(sf::Color::Black);
         scoreText.setCharacterSize(20);
-        window->draw(scoreText);
+        drawTextWithBox(*window, scoreText);
 
         // Hold
         sf::Text holdText(*font);
@@ -144,7 +145,7 @@ private:
         holdText.setPosition({PANEL_POS_X, GRID_POS_Y});
         holdText.setFillColor(sf::Color::Black);
         holdText.setCharacterSize(18);
-        window->draw(holdText);
+        drawTextWithBox(*window, holdText);
         drawMiniPiece(game_table->get_hold_type(), PANEL_POS_X, GRID_POS_Y + 30.f);
 
         // Next
@@ -153,7 +154,7 @@ private:
         nextText.setPosition({PANEL_POS_X, GRID_POS_Y + 180.f});
         nextText.setFillColor(sf::Color::Black);
         nextText.setCharacterSize(18);
-        window->draw(nextText);
+        drawTextWithBox(*window, nextText);
 
         auto next = game_table->get_next_types(3);
         for (size_t i = 0; i < next.size(); ++i) {

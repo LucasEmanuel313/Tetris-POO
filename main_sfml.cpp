@@ -13,6 +13,7 @@
 #include "MusicManager.h"
 #include "SfmlGame.h"
 #include "SfmlMultiplayer.h"
+#include "UiTextBox.h"
 #include "WindowManager.h"
 #include "table.h"
 
@@ -153,9 +154,9 @@ int main() {
                 sf::Text msg(font);
                 msg.setString("GAME OVER\nENTER = restart\nESC = menu");
                 msg.setCharacterSize(32);
-                msg.setFillColor(sf::Color::White);
+                msg.setFillColor(sf::Color::Black);
                 msg.setPosition({360.f, 320.f});
-                window.draw(msg);
+                drawTextWithBox(window, msg, 12.f);
             }
         }
 
