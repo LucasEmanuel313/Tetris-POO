@@ -119,8 +119,45 @@ private:
         add_block();
     }
 
+
+    bool can_simulate_move(int dx, int dy) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                if (current_block->piece[i][j] != ' ') {
+                    int newX = block_x_pos + dx + i;
+                    int newY = block_y_pos + dy + j;
+
+                    if (newX < 0 || newX >= 10 || newY < 0 || newY >= 22) return false;
+                    if (positions[newX][newY] != ' ') return false;
+                }
+            }
+        }
+        return true;
+    }
+    
 public:
 
+    int get_ghost_y() {
+        int ghost_y = block_y_pos;
+        block_clear();
+
+        // Simulamos a descida até encontrar uma colisão
+        while (can_simulate_move(0, (ghost_y - block_y_pos) - 1)) {
+            ghost_y--;
+        }
+
+        update_table();
+        
+        return ghost_y;
+    }
+
+    block* get_current_block() const {
+        return current_block;
+    }
+
+    int get_block_x_pos() const {
+        return block_x_pos;
+    }
    // Retorna o que existe em uma posição específica para a classe gráfica ler
     char get_cell(int x, int y) const {
         if (x >= 0 && x < 10 && y >= 0 && y < 22) {

@@ -100,7 +100,6 @@ int main() {
             singleplayer.draw_game();
         }
         
-        // Exibir frame
         window.display();
     }
 
