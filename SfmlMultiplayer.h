@@ -116,6 +116,8 @@ private:
     Mode mode = Mode::Menu;
     std::string statusLine;
 
+    int enterCooldownFrames = 0;
+
     // post game
     Button rematchBtn;
     Button leaveBtn;
@@ -326,6 +328,11 @@ public:
         setStatus("Escolha Host ou Join");
     }
 
+    void onEnter() {
+        // Evita que o mesmo clique que trocou o estado do menu acione um botão aqui.
+        enterCooldownFrames = 2;
+    }
+
     ~SfmlMultiplayer() {
         if (sock != INVALID_SOCKET) {
             sendLine(sock, "LEAVE");
@@ -408,6 +415,10 @@ public:
 
         // UI interactions
         if (mode == Mode::Menu) {
+            if (enterCooldownFrames > 0) {
+                --enterCooldownFrames;
+                return false;
+            }
             hostBtn.Update(mouse);
             joinBtn.Update(mouse);
             backBtn.Update(mouse);
