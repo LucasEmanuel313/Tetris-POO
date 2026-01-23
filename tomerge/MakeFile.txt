@@ -5,7 +5,7 @@ LDLIBS   := -lws2_32
 BUILD_DIR := build
 EXE := game.exe
 
-SRC := main.cpp table.cpp console_ui.cpp net_client.cpp server.cpp game_modes.cpp
+SRC := main.cpp table.cpp
 
 OBJ := $(addprefix $(BUILD_DIR)/,$(notdir $(SRC:.cpp=.o)))
 

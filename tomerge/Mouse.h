@@ -1,29 +1,29 @@
-#pragma once
-
 #include <SFML/Graphics.hpp>
 
-class Mouse {
-public:
+class Mouse{
+    public:
     bool isPressed = false;
     bool onPress = false;
     bool onRelease = false;
 
+    
     sf::Vector2f position;
-
-    void Update(sf::RenderWindow& window) {
+    void Update(sf::RenderWindow &window){
         position = sf::Vector2f(sf::Mouse::getPosition(window));
-
         onPress = false;
         onRelease = false;
-
-        if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
-            if (!isPressed) {
+        if(sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)){
+            if(!isPressed){
                 onPress = true;
+            } else {
+                onPress = false;
             }
             isPressed = true;
         } else {
-            if (isPressed) {
+            if(isPressed){
                 onRelease = true;
+            } else {
+                onRelease = false;
             }
             isPressed = false;
         }
