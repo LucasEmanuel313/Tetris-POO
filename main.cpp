@@ -9,6 +9,8 @@
 #include "Button.h"
 #include "WindowManager.cpp"
 #include "MainMenu.cpp"
+#include "MusicManager.h"
+
 
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 800
@@ -27,14 +29,12 @@ inline float getCenterX(float screenWidth, float buttonWidth) {
     return (screenWidth - buttonWidth) / 2.f;
 }
 
-
-
-
 int main() {
-    
-
     sf::Texture texture("Images/Background_Tetris.jpg");
     sf::Sprite background(texture);
+    sf::Music music;
+
+    MusicManager musicManager;
 
     using clock = std::chrono::steady_clock;
 
@@ -48,8 +48,6 @@ int main() {
     table ta;
     ta.add_block();
     
-
-
     Mouse mouse;
     sf::Font font;
     if (!font.openFromFile("Tetris.ttf")) {
@@ -57,7 +55,7 @@ int main() {
         return 1;
     }
 
-    Game singleplayer(&ta, windowManager.getWindow(), font);
+    Game singleplayer(&ta, windowManager.getWindow(), font, &current_state);
     MainMenu mainMenu(font);
 
 
@@ -91,6 +89,8 @@ int main() {
         mainMenu.updateMainMenu(mouse, current_state);
         window.clear(sf::Color::White);
         window.draw(background);
+
+        musicManager.updateMusic(current_state);
         // Desenhar baseado no estado
         if(current_state == GameState::MENU){
             mainMenu.drawMainMenu(window);
@@ -98,6 +98,7 @@ int main() {
         if(current_state == GameState::SINGLEPLAYER){
             singleplayer.HandleEvents();
             singleplayer.draw_game();
+            
         }
         
         window.display();

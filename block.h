@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdlib> // Para rand() e srand()
 #include <ctime>   // Para time()
+#include <iostream>
 
 #ifndef BLOCK_H
 #define BLOCK_H
