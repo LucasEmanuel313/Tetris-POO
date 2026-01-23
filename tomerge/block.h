@@ -3,13 +3,12 @@
 #include <ctime>   // Para time()
 #include <iostream>
 
-
 #ifndef BLOCK_H
 #define BLOCK_H
 
 const char PIECE_I[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', '#', '#'}, // Quatro blocos em linha
+    {'C', 'C', 'C', 'C'}, // Quatro blocos em linha
     {' ', ' ', ' ', ' '},
     {' ', ' ', ' ', ' '}
 };
@@ -17,52 +16,52 @@ const char PIECE_I[4][4] = {
 // Peça J (Jota)
 const char PIECE_J[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', '#', ' '},
-    {' ', ' ', '#', ' '}, // O 'canto' no topo direito
+    {'P', 'P', 'P', ' '},
+    {' ', ' ', 'P', ' '}, // O 'canto' no topo direito
     {' ', ' ', ' ', ' '}
 };
 
 // Peça L (Éle)
 const char PIECE_L[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', '#', ' '},
-    {'#', ' ', ' ', ' '}, // O 'canto' no topo esquerdo
+    {'O', 'O', 'O', ' '},
+    {'O', ' ', ' ', ' '}, // O 'canto' no topo esquerdo
     {' ', ' ', ' ', ' '}
 };
 
 // Peça O (Quadrado)
 const char PIECE_O[4][4] = {
     {' ', ' ', ' ', ' '},
-    {' ', '#', '#', ' '},
-    {' ', '#', '#', ' '}, // 2x2 centralizado
+    {' ', 'Y', 'Y', ' '},
+    {' ', 'Y', 'Y', ' '}, // 2x2 centralizado
     {' ', ' ', ' ', ' '}
 };
 
 // Peça S (Ese)
 const char PIECE_S[4][4] = {
     {' ', ' ', ' ', ' '},
-    {' ', '#', '#', ' '},
-    {'#', '#', ' ', ' '}, // Forma de Z (ou S)
+    {' ', 'R', 'R', ' '},
+    {'R', 'R', ' ', ' '}, // Forma de Z (ou S)
     {' ', ' ', ' ', ' '}
 };
 
 // Peça T (Tê)
 const char PIECE_T[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', '#', ' '},
-    {' ', '#', ' ', ' '}, // Bloco extra no meio
+    {'M', 'M', 'M', ' '},
+    {' ', 'M', ' ', ' '}, // Bloco extra no meio
     {' ', ' ', ' ', ' '}
 };
 
 // Peça Z (Zeta)
 const char PIECE_Z[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', ' ', ' '},
-    {' ', '#', '#', ' '}, // Forma de S (ou Z)
+    {'B', 'B', ' ', ' '},
+    {' ', 'B', 'B', ' '}, // Forma de S (ou Z)
     {' ', ' ', ' ', ' '}
 };
 
-static const char (*TETROMINOES[])[4][4] = {
+const char (*TETROMINOES[])[4][4] = {
     &PIECE_I,
     &PIECE_J,
     &PIECE_L,
@@ -73,7 +72,7 @@ static const char (*TETROMINOES[])[4][4] = {
 };
 class block {
     protected:
-        int type_ = 0;
+        
     public:
         char piece[4][4];
         int profile[4];
@@ -90,7 +89,7 @@ class block {
         for (int j = 0; j < 4; j++) { 
             
             // Verifica se a posição atual [Linha j][Coluna i] tem um bloco
-            if (piece[i][j] == '#') {
+            if (piece[i][j] != ' ') {
                 
                 // Armazena a linha j (o bdloco MAIS BAIXO) como o perfil
                 profile[i] = j; 
@@ -117,8 +116,6 @@ class block {
                 }
             }
         }
-        int type() const { return type_; }
-
         block(const char init[4][4]){
             for (size_t i = 0; i < 4; i++) {
                 for (size_t j = 0; j < 4; j++) {
@@ -126,28 +123,9 @@ class block {
                 }
             }
         }
-
-        // Constrói um tetromino específico (0..6)
-        block(int tetrominoIndex){
-            if (tetrominoIndex < 0) tetrominoIndex = 0;
-            if (tetrominoIndex > 6) tetrominoIndex = 6;
-            type_ = tetrominoIndex;
-            const char (*selected_piece)[4][4] = TETROMINOES[tetrominoIndex];
-            for (size_t i = 0; i < 4; i++) {
-                for (size_t j = 0; j < 4; j++) {
-                    piece[i][j] = (*selected_piece)[i][j];
-                }
-            }
-        }
-
         block(){
-            static bool seeded = false;
-            if (!seeded) {
-                srand(static_cast<unsigned int>(time(0)));
-                seeded = true;
-            }
+            srand(static_cast<unsigned int>(time(0))); // Inicializa a semente do gerador de números aleatórios
             int random_index = rand() % 7; // Gera um índice aleatório entre 0 e 6
-            type_ = random_index;
             const char (*selected_piece)[4][4] = TETROMINOES[random_index];
             for (size_t i = 0; i < 4; i++) {
                 for (size_t j = 0; j < 4; j++) {
@@ -156,7 +134,5 @@ class block {
             }
         }
 };
-
-
 
 #endif //BLOCK_H
