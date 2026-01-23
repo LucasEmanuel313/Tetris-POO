@@ -25,6 +25,9 @@ public:
             case GameState::SINGLEPLAYER:
                 musicFilePath = "Music/Tetris_music.mp3";
                 break;
+            case GameState::MULTIPLAYER:
+                musicFilePath = "Music/Tetris_music.mp3";
+                break;
             default:
                 stopMusic();
                 return;
