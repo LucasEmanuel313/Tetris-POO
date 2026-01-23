@@ -17,6 +17,12 @@ private:
     int  profile[10];
     block* current_block = nullptr;
 
+    // Para UI (SFML): tipo do bloco FIXO em cada célula.
+    // -1 = vazio; 0..6 = tetromino; 7 = garbage.
+    static constexpr unsigned char kEmptyType = 255;
+    static constexpr unsigned char kGarbageType = 7;
+    unsigned char fixedType[10][22];
+
     int block_x_pos = 0;
     int block_y_pos = 0;
 
@@ -55,10 +61,12 @@ private:
         for (int j = line; j < 21; ++j) {
             for (int i = 0; i < 10; ++i) {
                 positions[i][j] = positions[i][j + 1];
+                fixedType[i][j] = fixedType[i][j + 1];
             }
         }
         for (int i = 0; i < 10; ++i) {
             positions[i][21] = ' ';
+            fixedType[i][21] = kEmptyType;
         }
     }
 
@@ -85,6 +93,24 @@ private:
     void handle_landing() {
         // landing ocorreu (a peça não conseguiu descer mais)
         lastLandedEvent += 1;
+
+        // A peça atual já está desenhada em positions[] como '#'. Agora marcamos os tipos nas células FIXAS.
+        if (current_block) {
+            int t = current_block->type();
+            if (t < 0) t = 0;
+            if (t > 6) t = 6;
+            for (int i = 0; i < 4; ++i) {
+                for (int j = 0; j < 4; ++j) {
+                    if (current_block->piece[i][j] == '#') {
+                        int x = block_x_pos + i;
+                        int y = block_y_pos + j;
+                        if (x >= 0 && x < 10 && y >= 0 && y < 22) {
+                            fixedType[x][y] = static_cast<unsigned char>(t);
+                        }
+                    }
+                }
+            }
+        }
 
         int lines = check_and_clear_lines();
         if (lines < 0) lines = 0;
@@ -225,6 +251,7 @@ public:
         for (int i = 0; i < 10; ++i) {
             for (int j = 0; j < 22; ++j) {
                 positions[i][j] = ' ';
+                fixedType[i][j] = kEmptyType;
             }
         }
         score = 0;
@@ -261,6 +288,13 @@ public:
 
     int get_score() const { return score; }
 
+    // Tipo do bloco fixo para UI: -1 vazio, 0..6 tetromino, 7 garbage
+    int get_fixed_type(int x, int y) const {
+        if (x < 0 || x >= 10 || y < 0 || y >= 22) return -1;
+        unsigned char t = fixedType[x][y];
+        return (t == kEmptyType) ? -1 : (int)t;
+    }
+
     // --- Helpers para renderização (SFML) ---
     const block* get_current_block() const { return current_block; }
     int get_block_x_pos() const { return block_x_pos; }
@@ -269,15 +303,7 @@ public:
     // Retorna apenas o tabuleiro FIXO (sem a peça atual), para o renderer desenhar a peça separadamente.
     char get_fixed_cell(int x, int y) const {
         if (x < 0 || x >= 10 || y < 0 || y >= 22) return ' ';
-        if (!current_block) return positions[x][y];
-
-        // Se esta célula faz parte da peça atual (na posição atual), então não é "fixa".
-        int lx = x - block_x_pos;
-        int ly = y - block_y_pos;
-        if (lx >= 0 && lx < 4 && ly >= 0 && ly < 4) {
-            if (current_block->piece[lx][ly] == '#') return ' ';
-        }
-        return positions[x][y];
+        return (fixedType[x][y] == kEmptyType) ? ' ' : '#';
     }
 
     // Calcula onde a peça cairia (ghost) sem alterar o estado do jogo.
@@ -286,15 +312,7 @@ public:
 
         auto occupied_fixed = [&](int x, int y) -> bool {
             if (x < 0 || x >= 10 || y < 0 || y >= 22) return true;
-            if (positions[x][y] != '#') return false;
-
-            // Ignora a peça atual desenhada em positions[] na posição atual.
-            int lx = x - block_x_pos;
-            int ly = y - block_y_pos;
-            if (lx >= 0 && lx < 4 && ly >= 0 && ly < 4) {
-                if (current_block->piece[lx][ly] == '#') return false;
-            }
-            return true;
+            return fixedType[x][y] != kEmptyType;
         };
 
         int ghostY = block_y_pos;
@@ -578,12 +596,14 @@ public:
             for (int y = 21; y > 0; --y) {
                 for (int x = 0; x < 10; ++x) {
                     positions[x][y] = positions[x][y - 1];
+                    fixedType[x][y] = fixedType[x][y - 1];
                 }
             }
 
             // linha lixo em y=0
             for (int x = 0; x < 10; ++x) {
                 positions[x][0] = (x == hole) ? ' ' : '#';
+                fixedType[x][0] = (x == hole) ? kEmptyType : kGarbageType;
             }
         }
 
@@ -623,6 +643,7 @@ public:
         for (int i = 0; i < 10; ++i) {
             for (int j = 0; j < 22; ++j) {
                 positions[i][j] = ' ';
+                fixedType[i][j] = kEmptyType;
             }
         }
 

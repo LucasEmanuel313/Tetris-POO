@@ -88,12 +88,10 @@ private:
         // 1) blocos fixos (sem a peça atual)
         for (int y = 0; y < GRID_ROWS; ++y) {
             for (int x = 0; x < GRID_COLS; ++x) {
-                char c = game_table->get_fixed_cell(x, y);
-                if (c == '#') {
-                    drawCell(x, y, fixedBlockColor());
-                } else {
-                    drawCell(x, y, sf::Color::White);
-                }
+                int t = game_table->get_fixed_type(x, y);
+                if (t >= 0 && t <= 6) drawCell(x, y, colorForType(t));
+                else if (t == 7) drawCell(x, y, fixedBlockColor());
+                else drawCell(x, y, sf::Color::White);
             }
         }
 
@@ -104,7 +102,9 @@ private:
         sf::Color c = colorForType(type);
 
         int ghostY = game_table->get_ghost_y();
-        drawPieceAt(cur, game_table->get_block_x_pos(), ghostY, sf::Color(120, 120, 120), true);
+        sf::Color ghostColor = c;
+        ghostColor.a = 80;
+        drawPieceAt(cur, game_table->get_block_x_pos(), ghostY, ghostColor, true);
         drawPieceAt(cur, game_table->get_block_x_pos(), game_table->get_block_y_pos(), c, false);
     }
 
