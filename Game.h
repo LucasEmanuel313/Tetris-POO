@@ -37,6 +37,7 @@ class Game {
             case 'R': return sf::Color(150, 0, 0);       // Vermelho Escuro
             case 'B': return sf::Color(0, 0, 150);       // Azul Escuro
             case 'O': return sf::Color(180, 100, 0);     // Laranja Escuro
+            case '*': return sf::Color(100, 100, 100);   // Ghost Block: Cinza
             default:  return sf::Color(40, 40, 40);      // Vazio: Cinza muito escuro (melhor que branco para o tema)
         }
     }
@@ -54,6 +55,24 @@ class Game {
             }
         }
     }
+
+    void render_ghost_block(int ghost_y) {
+        block* currentBlock = game_table->get_current_block();
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                if (currentBlock->piece[i][j] != ' ') {
+                    int x = game_table->get_block_x_pos() + i;
+                    int y = ghost_y + j;
+                    if (x >= 0 && x < GRID_COLS && y >= 0 && y < GRID_ROWS) {
+                        grid[x][y].setFillColor(get_color_for_cell('*')); // Cor do bloco fantasma
+                        window->draw(grid[x][y]);
+                    }
+                }
+            }
+        }
+
+    }
+
     void create_next_block_menu() {
         //Draws the next block menu rectangle
         sf::Color rectangleColor(150, 150, 150);
@@ -67,6 +86,7 @@ class Game {
     
     public:
     void draw_grid() {
+        
         for (int j = 0; j < GRID_ROWS; j++) {
             for (int i = 0; i < GRID_COLS; i++) {
                 // 1. Acessa o conteúdo da célula na lógica
@@ -91,6 +111,7 @@ class Game {
                 window->draw(grid[i][j]);
             }
         }
+        render_ghost_block(game_table->get_ghost_y());
     }
     void draw_next_block_menu() {
         window->draw(rectangle);
