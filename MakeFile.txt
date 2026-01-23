@@ -1,26 +1,51 @@
 CXX      := g++
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra
-LDLIBS   := -lws2_32
+
+LDLIBS_CONSOLE := -lws2_32
+
+# SFML (ajuste se necessário)
+SFML_DIR := C:/SFML-3.0.2
+SFML_INC := -I$(SFML_DIR)/include
+SFML_LIBDIR := -L$(SFML_DIR)/lib
+LDLIBS_SFML := -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio -lws2_32
 
 BUILD_DIR := build
-EXE := game.exe
+BUILD_SFML_DIR := build_sfml
 
-SRC := main.cpp table.cpp console_ui.cpp net_client.cpp server.cpp game_modes.cpp
+EXE_CONSOLE := game.exe
+EXE_SFML := sfml_game.exe
 
-OBJ := $(addprefix $(BUILD_DIR)/,$(notdir $(SRC:.cpp=.o)))
+SRC_CONSOLE := main.cpp table.cpp console_ui.cpp net_client.cpp server.cpp game_modes.cpp
+SRC_SFML := main_sfml.cpp WindowManager.cpp table.cpp net_client.cpp server.cpp
 
-.PHONY: all clean
+OBJ_CONSOLE := $(addprefix $(BUILD_DIR)/,$(notdir $(SRC_CONSOLE:.cpp=.o)))
+OBJ_SFML := $(addprefix $(BUILD_SFML_DIR)/,$(notdir $(SRC_SFML:.cpp=.o)))
 
-all: $(EXE)
+.PHONY: all console sfml clean
+
+all: console sfml
+
+console: $(EXE_CONSOLE)
+
+sfml: $(EXE_SFML)
 
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
-$(EXE): $(BUILD_DIR) $(OBJ)
-	$(CXX) $(CXXFLAGS) $(OBJ) -o $@ $(LDLIBS)
+$(BUILD_SFML_DIR):
+	@mkdir -p $(BUILD_SFML_DIR)
+
+$(EXE_CONSOLE): $(BUILD_DIR) $(OBJ_CONSOLE)
+	$(CXX) $(CXXFLAGS) $(OBJ_CONSOLE) -o $@ $(LDLIBS_CONSOLE)
+
+$(EXE_SFML): $(BUILD_SFML_DIR) $(OBJ_SFML)
+	$(CXX) $(CXXFLAGS) $(OBJ_SFML) -o $@ $(SFML_LIBDIR) $(LDLIBS_SFML)
 
 $(BUILD_DIR)/%.o: %.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(BUILD_SFML_DIR)/%.o: %.cpp | $(BUILD_SFML_DIR)
+	$(CXX) $(CXXFLAGS) $(SFML_INC) -c $< -o $@
+
 clean:
-	@rm -rf $(BUILD_DIR) *.exe
+	@rm -rf $(BUILD_DIR) $(BUILD_SFML_DIR) *.exe

@@ -100,6 +100,14 @@ int main() {
             if (exitRequested) window.close();
         }
 
+        static GameState prev_state = GameState::MENU;
+        if (prev_state != current_state) {
+            if (current_state == GameState::MULTIPLAYER) {
+                mp.onEnter();
+            }
+            prev_state = current_state;
+        }
+
         if (current_state == GameState::MULTIPLAYER) {
             bool backToMenu = mp.update(mouse);
             if (backToMenu) {

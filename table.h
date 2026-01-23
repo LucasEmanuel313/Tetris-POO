@@ -76,7 +76,7 @@ private:
         for (int y = 0; y < 22; ++y) {
             bool full = true;
             for (int x = 0; x < 10; ++x) {
-                if (positions[x][y] != '#') {
+                if (fixedType[x][y] == kEmptyType) {
                     full = false;
                     break;
                 }
@@ -139,17 +139,15 @@ private:
     bool gameOver = false;
 
     bool collides_here() const {
+        if (!current_block) return false;
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
                 if (current_block->piece[i][j] == '#') {
                     int x = block_x_pos + i;
                     int y = block_y_pos + j;
 
-                    // se sair dos limites, é game over também (spawn inválido)
                     if (x < 0 || x >= 10 || y < 0 || y >= 22) return true;
-
-                    // colisão com bloco já fixado
-                    if (positions[x][y] == '#') return true;
+                    if (fixedType[x][y] != kEmptyType) return true;
                 }
             }
         }
@@ -158,7 +156,7 @@ private:
 
     bool top_reached() const {
         for (int x = 0; x < 10; ++x) {
-            if (positions[x][21] == '#') return true;
+            if (fixedType[x][21] != kEmptyType) return true;
         }
         return false;
     }
@@ -400,29 +398,20 @@ public:
 
     bool can_move(int dx, int dy) {
         if (!current_block) return false;
-        block_clear();
 
-        bool ok = true;
-        for (int i = 0; i < 4 && ok; ++i) {
-            for (int j = 0; j < 4 && ok; ++j) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
                 if (current_block->piece[i][j] == '#') {
                     int newX = block_x_pos + dx + i;
                     int newY = block_y_pos + dy + j;
 
-                    if (newX < 0 || newX >= 10 || newY < 0 || newY >= 22) {
-                        ok = false;
-                        break;
-                    }
-                    if (positions[newX][newY] == '#') {
-                        ok = false;
-                        break;
-                    }
+                    if (newX < 0 || newX >= 10 || newY < 0 || newY >= 22) return false;
+                    if (fixedType[newX][newY] != kEmptyType) return false;
                 }
             }
         }
 
-        update_table();
-        return ok;
+        return true;
     }
 
     void add_block() {
@@ -509,7 +498,7 @@ public:
             block_x_pos = oldX + kicks[k];
             block_y_pos = oldY;
 
-            if (!collides_here()) { // agora só checa colisão/borda
+            if (!collides_here()) { // colisão/borda contra FIXOS (fixedType)
                 ok = true;
                 break;
             }
