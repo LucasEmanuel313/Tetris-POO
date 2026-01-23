@@ -16,6 +16,7 @@
 #include "MusicManager.h"
 #include "SfmlGame.h"
 #include "TextField.h"
+#include "UiTextBox.h"
 #include "net_client.h"
 #include "server.h"
 #include "table.h"
@@ -96,6 +97,9 @@ private:
     bool hosting = false;
     SOCKET sock = INVALID_SOCKET;
 
+    std::string sessionIp;
+    int sessionPort = 0;
+
     bool running = false;
     bool started = false;
     bool initialized = false;
@@ -161,6 +165,8 @@ private:
 
     void startClient(const std::string& ip, int port, bool host) {
         isHost = host;
+        sessionIp = ip;
+        sessionPort = port;
 
         SOCKET s = INVALID_SOCKET;
         if (!connectToServer(ip, port, s)) {
@@ -510,7 +516,7 @@ public:
     void draw(sf::RenderWindow& window) {
         if (mode == Mode::Menu) {
             applyMenuLayout();
-            window.draw(title);
+            drawTextWithBox(window, title);
 
             if (menuPane == MenuPane::Root) {
                 hostBtn.draw(window);
@@ -520,14 +526,16 @@ public:
                 sf::Text ipLabel(title);
                 ipLabel.setString("IP:");
                 ipLabel.setCharacterSize(18);
+                ipLabel.setFillColor(sf::Color::Black);
                 ipLabel.setPosition({420.f, 255.f});
-                window.draw(ipLabel);
+                drawTextWithBox(window, ipLabel);
 
                 sf::Text portLabel(title);
                 portLabel.setString("Port:");
                 portLabel.setCharacterSize(18);
+                portLabel.setFillColor(sf::Color::Black);
                 portLabel.setPosition({420.f, 315.f});
-                window.draw(portLabel);
+                drawTextWithBox(window, portLabel);
 
                 ipField.draw(window);
                 portField.draw(window);
@@ -538,13 +546,20 @@ public:
         }
         else if (mode == Mode::Waiting) {
             sf::Text t(title);
+            t.setFillColor(sf::Color::Black);
             t.setString(statusLine);
-            t.setCharacterSize(20);
-            t.setPosition({360.f, 160.f});
-            window.draw(t);
+            t.setCharacterSize(24);
+            t.setPosition({300.f, 160.f});
+            drawTextWithBox(window, t, 10.f);
 
-            oppRenderer.draw(window, opp);
-            localRenderer.draw_game();
+            if (isHost && sessionPort > 0) {
+                sf::Text info(title);
+                info.setFillColor(sf::Color::Black);
+                info.setCharacterSize(18);
+                info.setString("Host ativo. Peca o oponente para entrar em: IP do host na rede, porta " + std::to_string(sessionPort));
+                info.setPosition({220.f, 220.f});
+                drawTextWithBox(window, info, 10.f);
+            }
         }
         else if (mode == Mode::Playing) {
             oppRenderer.draw(window, opp);
@@ -555,7 +570,7 @@ public:
             g.setCharacterSize(16);
             g.setPosition({SfmlGame::PANEL_POS_X, SfmlGame::GRID_POS_Y + 700.f});
             g.setFillColor(sf::Color::Black);
-            window.draw(g);
+            drawTextWithBox(window, g);
         }
         else if (mode == Mode::PostGame) {
             oppRenderer.draw(window, opp);
@@ -569,14 +584,15 @@ public:
             sf::Text msg(title);
             msg.setString(statusLine);
             msg.setCharacterSize(28);
-            msg.setFillColor(sf::Color::White);
+            msg.setFillColor(sf::Color::Black);
             msg.setPosition({450.f, 420.f});
-            window.draw(msg);
+            drawTextWithBox(window, msg, 12.f);
 
             rematchBtn.draw(window);
             leaveBtn.draw(window);
         }
 
-        window.draw(hint);
+        hint.setFillColor(sf::Color::Black);
+        drawTextWithBox(window, hint);
     }
 };
