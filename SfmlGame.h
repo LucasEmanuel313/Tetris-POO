@@ -32,8 +32,8 @@ private:
     sf::RenderWindow* window = nullptr;
     const sf::Font* font = nullptr;
 
-    bool prevKeyStates[6] = {false, false, false, false, false, false};
-    // 0=Left, 1=Right, 2=Down, 3=Up, 4=Space, 5=C(hold)
+    bool prevKeyStates[7] = {false, false, false, false, false, false, false};
+    // 0=Left, 1=Right, 2=Down, 3=Up, 4=Space, 5=C(hold), 6=P(mute)
 
     static sf::Color colorForType(int type) {
         switch (type) {
@@ -135,10 +135,23 @@ private:
     void drawSidePanels() {
         if (!font) return;
 
+        // UI: mostrar apenas peças futuras.
+        // Topo ("HOLD"): próxima peça (next[0])
+        // Lista ("NEXT"): próximas seguintes (next[1], next[2])
+        static constexpr int kTotalPreviewCount = 3;
+        static constexpr int kNextListCount = kTotalPreviewCount - 1;
+
+        const float miniX = PANEL_POS_X + PANEL_WIDTH / 2.f - BLOCK_SIZE * 2.f;
+        const float holdMiniY = GRID_POS_Y + 35.f;
+        const float nextLabelY = holdMiniY + 4.f * BLOCK_SIZE + 45.f;
+        const float nextMiniY0 = nextLabelY + 35.f;
+        const float nextSpacingY = 4.f * BLOCK_SIZE + 35.f;
+        const float scoreY = nextMiniY0 + (float)kNextListCount * nextSpacingY + 25.f;
+
         // Score
         sf::Text scoreText(*font);
         scoreText.setString("Score: " + std::to_string(game_table->get_score()));
-        scoreText.setPosition({PANEL_POS_X + 10.f, GRID_POS_Y + 250.f});
+        scoreText.setPosition({PANEL_POS_X + 10.f, scoreY});
         scoreText.setFillColor(sf::Color::Black);
         scoreText.setCharacterSize(20);
         drawTextWithBox(*window, scoreText);
@@ -150,19 +163,20 @@ private:
         holdText.setFillColor(sf::Color::Black);
         holdText.setCharacterSize(18);
         drawTextWithBox(*window, holdText);
-        drawMiniPiece(game_table->get_hold_type(), PANEL_POS_X + PANEL_WIDTH / 2 - BLOCK_SIZE * 2, GRID_POS_Y + 30.f);
+
+        auto preview = game_table->get_next_types(kTotalPreviewCount);
+        int next0 = preview.empty() ? -1 : preview[0];
+        drawMiniPiece(next0, miniX, holdMiniY);
         // Next
         sf::Text nextText(*font);
         nextText.setString("NEXT");
-        nextText.setPosition({PANEL_POS_X + 10.f, GRID_POS_Y + 180.f});
+        nextText.setPosition({PANEL_POS_X + 10.f, nextLabelY});
         nextText.setFillColor(sf::Color::Black);
         nextText.setCharacterSize(18);
         drawTextWithBox(*window, nextText);
 
-        auto next = game_table->get_next_types(3);
-        drawMiniPiece(next[0], PANEL_POS_X + PANEL_WIDTH / 2 - BLOCK_SIZE * 2, GRID_POS_Y + 50.f);
-        for (size_t i = 1; i < next.size(); ++i) {
-            drawMiniPiece(next[i], PANEL_POS_X + PANEL_WIDTH / 2 - BLOCK_SIZE * 2, GRID_POS_Y + 170.f + (float)i * 140.f);
+        for (size_t i = 1; i < preview.size(); ++i) {
+            drawMiniPiece(preview[i], miniX, nextMiniY0 + (float)(i - 1) * nextSpacingY);
         }
     }
 

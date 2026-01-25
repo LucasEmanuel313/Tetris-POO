@@ -13,15 +13,22 @@
 class table {
 
 private:
-    char positions[10][22];
-    int  profile[10];
+    static constexpr int kCols = 10;
+    static constexpr int kRows = 22;              // linhas visíveis (0..21)
+    static constexpr int kSpawnBufferRows = 4;    // "linhas ocultas" para spawn acima do topo
+    static constexpr int kMaxActiveY = kRows + kSpawnBufferRows - 1; // 25
+    static constexpr int kSpawnX = 3;
+    static constexpr int kSpawnY = kRows;         // nasce acima do topo visível
+
+    char positions[kCols][kRows];
+    int  profile[kCols];
     block* current_block = nullptr;
 
     // Para UI (SFML): tipo do bloco FIXO em cada célula.
     // -1 = vazio; 0..6 = tetromino; 7 = garbage.
     static constexpr unsigned char kEmptyType = 255;
     static constexpr unsigned char kGarbageType = 7;
-    unsigned char fixedType[10][22];
+    unsigned char fixedType[kCols][kRows];
 
     int block_x_pos = 0;
     int block_y_pos = 0;
@@ -58,24 +65,24 @@ private:
     }
 
     void clear_line(int line) {
-        for (int j = line; j < 21; ++j) {
-            for (int i = 0; i < 10; ++i) {
+        for (int j = line; j < (kRows - 1); ++j) {
+            for (int i = 0; i < kCols; ++i) {
                 positions[i][j] = positions[i][j + 1];
                 fixedType[i][j] = fixedType[i][j + 1];
             }
         }
-        for (int i = 0; i < 10; ++i) {
-            positions[i][21] = ' ';
-            fixedType[i][21] = kEmptyType;
+        for (int i = 0; i < kCols; ++i) {
+            positions[i][kRows - 1] = ' ';
+            fixedType[i][kRows - 1] = kEmptyType;
         }
     }
 
     int check_and_clear_lines() {
         int linesCleared = 0;
 
-        for (int y = 0; y < 22; ++y) {
+        for (int y = 0; y < kRows; ++y) {
             bool full = true;
-            for (int x = 0; x < 10; ++x) {
+            for (int x = 0; x < kCols; ++x) {
                 if (fixedType[x][y] == kEmptyType) {
                     full = false;
                     break;
@@ -94,21 +101,33 @@ private:
         // landing ocorreu (a peça não conseguiu descer mais)
         lastLandedEvent += 1;
 
-        // A peça atual já está desenhada em positions[] como '#'. Agora marcamos os tipos nas células FIXAS.
+        // A peça atual já está desenhada em positions[] (apenas parte visível) como '#'.
+        // Agora marcamos os tipos nas células FIXAS.
         if (current_block) {
             int t = current_block->type();
             if (t < 0) t = 0;
             if (t > 6) t = 6;
+            bool lockedAboveTop = false;
             for (int i = 0; i < 4; ++i) {
                 for (int j = 0; j < 4; ++j) {
                     if (current_block->piece[i][j] == '#') {
                         int x = block_x_pos + i;
                         int y = block_y_pos + j;
-                        if (x >= 0 && x < 10 && y >= 0 && y < 22) {
+                        if (y >= kRows) {
+                            lockedAboveTop = true;
+                            continue;
+                        }
+                        if (x >= 0 && x < kCols && y >= 0 && y < kRows) {
                             fixedType[x][y] = static_cast<unsigned char>(t);
                         }
                     }
                 }
+            }
+
+            // Se a peça travou com qualquer bloco acima do topo visível, é GAME OVER.
+            if (lockedAboveTop) {
+                gameOver = true;
+                return;
             }
         }
 
@@ -123,11 +142,6 @@ private:
             case 3: score += 300; break;
             case 4: score += 1200; break;
             default: break;
-        }
-
-        if (top_reached()) {
-            gameOver = true;
-            return;
         }
 
         // Nova peça
@@ -146,8 +160,14 @@ private:
                     int x = block_x_pos + i;
                     int y = block_y_pos + j;
 
-                    if (x < 0 || x >= 10 || y < 0 || y >= 22) return true;
-                    if (fixedType[x][y] != kEmptyType) return true;
+                    if (x < 0 || x >= kCols) return true;
+                    if (y < 0) return true;
+                    if (y > kMaxActiveY) return true;
+
+                    // acima do topo visível, consideramos vazio (spawn buffer)
+                    if (y < kRows) {
+                        if (fixedType[x][y] != kEmptyType) return true;
+                    }
                 }
             }
         }
@@ -155,8 +175,8 @@ private:
     }
 
     bool top_reached() const {
-        for (int x = 0; x < 10; ++x) {
-            if (fixedType[x][21] != kEmptyType) return true;
+        for (int x = 0; x < kCols; ++x) {
+            if (fixedType[x][kRows - 1] != kEmptyType) return true;
         }
         return false;
     }
@@ -168,7 +188,7 @@ private:
                 if (current_block->piece[i][j] == '#') {
                     int x = block_x_pos + i;
                     int y = block_y_pos + j;
-                    if (x >= 0 && x < 10 && y >= 0 && y < 22) {
+                    if (x >= 0 && x < kCols && y >= 0 && y < kRows) {
                         if (positions[x][y] == ' ') positions[x][y] = '#';
                     }
                 }
@@ -246,8 +266,8 @@ private:
 
 public:
     table() {
-        for (int i = 0; i < 10; ++i) {
-            for (int j = 0; j < 22; ++j) {
+        for (int i = 0; i < kCols; ++i) {
+            for (int j = 0; j < kRows; ++j) {
                 positions[i][j] = ' ';
                 fixedType[i][j] = kEmptyType;
             }
@@ -268,11 +288,11 @@ public:
     }
 
     void print_table() {
-        for (int i = 21; i >= 0; --i) {
-            for (int j = 0; j < 10; ++j) {
+        for (int i = kRows - 1; i >= 0; --i) {
+            for (int j = 0; j < kCols; ++j) {
                 std::cout << '|' << positions[j][i] << '|';
             }
-            int rowIndexFromTop = 21 - i;
+            int rowIndexFromTop = (kRows - 1) - i;
             std::string panel = side_panel_line_single(rowIndexFromTop);
             if (!panel.empty()) {
                 std::cout << "   " << panel;
@@ -288,7 +308,7 @@ public:
 
     // Tipo do bloco fixo para UI: -1 vazio, 0..6 tetromino, 7 garbage
     int get_fixed_type(int x, int y) const {
-        if (x < 0 || x >= 10 || y < 0 || y >= 22) return -1;
+        if (x < 0 || x >= kCols || y < 0 || y >= kRows) return -1;
         unsigned char t = fixedType[x][y];
         return (t == kEmptyType) ? -1 : (int)t;
     }
@@ -300,7 +320,7 @@ public:
 
     // Retorna apenas o tabuleiro FIXO (sem a peça atual), para o renderer desenhar a peça separadamente.
     char get_fixed_cell(int x, int y) const {
-        if (x < 0 || x >= 10 || y < 0 || y >= 22) return ' ';
+        if (x < 0 || x >= kCols || y < 0 || y >= kRows) return ' ';
         return (fixedType[x][y] == kEmptyType) ? ' ' : '#';
     }
 
@@ -309,7 +329,9 @@ public:
         if (!current_block) return block_y_pos;
 
         auto occupied_fixed = [&](int x, int y) -> bool {
-            if (x < 0 || x >= 10 || y < 0 || y >= 22) return true;
+            if (x < 0 || x >= kCols) return true;
+            if (y < 0) return true;
+            if (y >= kRows) return false; // acima do topo visível não tem fixos
             return fixedType[x][y] != kEmptyType;
         };
 
@@ -357,9 +379,9 @@ public:
         int t;
         char c;
         std::string out;
-        out.reserve(10 * 22);
-        for (int y = 0; y < 22; ++y) {
-            for (int x = 0; x < 10; ++x) {
+        out.reserve(kCols * kRows);
+        for (int y = 0; y < kRows; ++y) {
+            for (int x = 0; x < kCols; ++x) {
                 t = get_fixed_type(x, y);
                 c = (t < 0) ? '.' : static_cast<char>('0' + t);
                 std::cout << "Character sent: " << c << std::endl;
@@ -378,7 +400,7 @@ public:
                 if (current_block->piece[i][j] == '#') {
                     int x = block_x_pos + i;
                     int y = block_y_pos + j;
-                    if (x >= 0 && x < 10 && y >= 0 && y < 22) {
+                    if (x >= 0 && x < kCols && y >= 0 && y < kRows) {
                         positions[x][y] = '#';
                     }
                 }
@@ -393,7 +415,7 @@ public:
                 if (current_block->piece[i][j] == '#') {
                     int x = block_x_pos + i;
                     int y = block_y_pos + j;
-                    if (x >= 0 && x < 10 && y >= 0 && y < 22) {
+                    if (x >= 0 && x < kCols && y >= 0 && y < kRows) {
                         positions[x][y] = ' ';
                     }
                 }
@@ -410,8 +432,14 @@ public:
                     int newX = block_x_pos + dx + i;
                     int newY = block_y_pos + dy + j;
 
-                    if (newX < 0 || newX >= 10 || newY < 0 || newY >= 22) return false;
-                    if (fixedType[newX][newY] != kEmptyType) return false;
+                    if (newX < 0 || newX >= kCols) return false;
+                    if (newY < 0) return false;
+                    if (newY > kMaxActiveY) return false;
+
+                    // acima do topo visível: sem colisão com fixos
+                    if (newY < kRows) {
+                        if (fixedType[newX][newY] != kEmptyType) return false;
+                    }
                 }
             }
         }
@@ -422,8 +450,8 @@ public:
     void add_block() {
         int type = pop_next_type();
         current_block = new block(type);
-        block_x_pos = 3;
-        block_y_pos = 18;
+        block_x_pos = kSpawnX;
+        block_y_pos = kSpawnY;
         needsSpawn = false;
 
         // se já nasce colidindo com o topo/stack, game over imediato
@@ -462,8 +490,8 @@ public:
             int swapType = holdType;
             holdType = curType;
             current_block = new block(swapType);
-            block_x_pos = 3;
-            block_y_pos = 18;
+            block_x_pos = kSpawnX;
+            block_y_pos = kSpawnY;
 
             if (collides_here()) {
                 gameOver = true;
@@ -547,7 +575,7 @@ public:
         if (!current_block || gameOver) return;
         int rightCol = right_most_col_of_piece();
         int globalRight = block_x_pos + rightCol;
-        if (globalRight >= 9) return;
+        if (globalRight >= (kCols - 1)) return;
 
         if (can_move(1, 0)) {
             block_clear();
@@ -583,19 +611,19 @@ public:
                 return;
             }
 
-            std::uniform_int_distribution<int> dist(0, 9);
+            std::uniform_int_distribution<int> dist(0, kCols - 1);
             int hole = dist(rng);
 
             // shift up: y = 21 <- 20 <- ... <- 0
-            for (int y = 21; y > 0; --y) {
-                for (int x = 0; x < 10; ++x) {
+            for (int y = (kRows - 1); y > 0; --y) {
+                for (int x = 0; x < kCols; ++x) {
                     positions[x][y] = positions[x][y - 1];
                     fixedType[x][y] = fixedType[x][y - 1];
                 }
             }
 
             // linha lixo em y=0
-            for (int x = 0; x < 10; ++x) {
+            for (int x = 0; x < kCols; ++x) {
                 positions[x][0] = (x == hole) ? ' ' : '#';
                 fixedType[x][0] = (x == hole) ? kEmptyType : kGarbageType;
             }
@@ -613,7 +641,8 @@ public:
             }
         }
 
-        if (top_reached()) gameOver = true;
+        // Nota: não é game over só por ocupar a linha do topo.
+        // Game over aqui acontece quando o lixo tenta empurrar blocos para fora (checado acima).
     }
 
     // --- Multiplayer hook: quantas linhas limpei desde a última leitura ---
@@ -634,8 +663,8 @@ public:
         delete current_block;
         current_block = nullptr;
 
-        for (int i = 0; i < 10; ++i) {
-            for (int j = 0; j < 22; ++j) {
+        for (int i = 0; i < kCols; ++i) {
+            for (int j = 0; j < kRows; ++j) {
                 positions[i][j] = ' ';
                 fixedType[i][j] = kEmptyType;
             }
