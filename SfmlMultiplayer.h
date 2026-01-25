@@ -37,6 +37,19 @@ class SfmlOpponentRenderer {
     sf::RectangleShape cells[COLS][ROWS];
     sf::Vector2f origin;
 
+    static sf::Color colorForType(char c) {
+        switch (c) {
+            case '0': return sf::Color(0, 150, 150);   // I
+            case '1': return sf::Color(0, 128, 0);     // J
+            case '2': return sf::Color(180, 100, 0);   // L
+            case '3': return sf::Color(180, 180, 0);   // O
+            case '4': return sf::Color(150, 0, 0);     // S
+            case '5': return sf::Color(150, 0, 150);   // T
+            case '6': return sf::Color(0, 0, 150);     // Z
+            default: return sf::Color(200, 200, 200);
+        }
+    }
+
 public:
     explicit SfmlOpponentRenderer(sf::Vector2f origin_) : origin(origin_) {
         for (int x = 0; x < COLS; ++x) {
@@ -58,7 +71,8 @@ public:
                 float sx = origin.x + x * BLOCK;
                 float sy = origin.y + (ROWS - 1 - y) * BLOCK;
                 cells[x][y].setPosition({sx, sy});
-                cells[x][y].setFillColor((c == '#') ? sf::Color(80, 80, 80) : sf::Color::White);
+                cells[x][y].setFillColor((c == '.') ? sf::Color::White : colorForType(c));
+                std::cout << "Character received: " << c << std::endl;
                 window.draw(cells[x][y]);
             }
         }
