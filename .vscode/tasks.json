@@ -13,6 +13,8 @@
                 "net_client.cpp",
                 "server.cpp",
                 "table.cpp",
+                "SfmlGame.cpp",
+                "SfmlMultiplayer.cpp",
                 "console_ui.cpp",
                 "WindowManager.cpp",
                 "SinglePlayerState.cpp",

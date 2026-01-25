@@ -16,7 +16,7 @@ EXE_CONSOLE := game.exe
 EXE_SFML := sfml_game.exe
 
 SRC_CONSOLE := main.cpp table.cpp console_ui.cpp net_client.cpp server.cpp game_modes.cpp
-SRC_SFML := main_sfml.cpp WindowManager.cpp table.cpp net_client.cpp server.cpp
+SRC_SFML := main_sfml.cpp WindowManager.cpp SfmlGame.cpp SfmlMultiplayer.cpp table.cpp net_client.cpp server.cpp
 
 OBJ_CONSOLE := $(addprefix $(BUILD_DIR)/,$(notdir $(SRC_CONSOLE:.cpp=.o)))
 OBJ_SFML := $(addprefix $(BUILD_SFML_DIR)/,$(notdir $(SRC_SFML:.cpp=.o)))
