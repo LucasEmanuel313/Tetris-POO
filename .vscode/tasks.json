@@ -22,6 +22,7 @@
                 "-lsfml-window",
                 "-lsfml-system",
                 "-lsfml-audio",
+                "-lws2_32",
                 "-lstdc++",
                 "-o",
                 "${fileDirname}\\${fileBasenameNoExtension}.exe"
