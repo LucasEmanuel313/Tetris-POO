@@ -25,6 +25,15 @@ static bool tryLoadTexture(sf::Texture& tex) {
     return tex.loadFromFile("Images/Background_Tetris.jpg") || tex.loadFromFile("tomerge/Images/Background_Tetris.jpg");
 }
 
+
+void changeFallInterval(std::chrono::milliseconds& fallInterval, int score) {
+    int level = score / 100;
+    fallInterval = std::chrono::milliseconds(500-(level*15));
+    if (fallInterval < std::chrono::milliseconds(100)) {
+        fallInterval = std::chrono::milliseconds(100);
+    }
+}
+
 int main() {
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -122,6 +131,7 @@ int main() {
                 ta.block_descend();
                 ta.spawn_if_needed();
                 lastFall = now;
+                changeFallInterval(const_cast<std::chrono::milliseconds&>(fallInterval), game.getScore());
             }
             game.HandleEvents();
 
@@ -146,6 +156,8 @@ int main() {
         } else if (current_state == GameState::GAME_OVER) {
             game.draw_game();
             if (showGameOver) {
+                musicManager.updateMusic(GameState::GAME_OVER);
+
                 sf::RectangleShape overlay;
                 overlay.setSize({1200.f, 800.f});
                 overlay.setFillColor(sf::Color(0, 0, 0, 140));

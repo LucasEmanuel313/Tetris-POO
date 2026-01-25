@@ -32,6 +32,11 @@ public:
                     musicFilePath = "Music/Tetris_music.mp3";
                     music.setVolume(50.f);
                     break;
+                case GameState::GAME_OVER:
+                    musicFilePath = "Music/GameOver.ogg";
+                    music.setLooping(false);
+                    music.setVolume(50.f);
+                    break;
                 default:
                     stopMusic();
                     return;
