@@ -354,11 +354,16 @@ public:
     // Multiplayer: serializa o tabuleiro (inclui a peça atual, pois ela está em positions)
     // Formato: 22 linhas (y=0..21) * 10 colunas (x=0..9), '.' vazio, '#' preenchido
     std::string serialize_board() const {
+        int t;
+        char c;
         std::string out;
         out.reserve(10 * 22);
         for (int y = 0; y < 22; ++y) {
             for (int x = 0; x < 10; ++x) {
-                out.push_back(positions[x][y] == '#' ? '#' : '.');
+                t = get_fixed_type(x, y);
+                c = (t < 0) ? '.' : static_cast<char>('0' + t);
+                std::cout << "Character sent: " << c << std::endl;
+                out.push_back(positions[x][y] == ' ' ? '.' : c);
             }
         }
         return out;
