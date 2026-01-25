@@ -214,6 +214,11 @@ public:
         game_table->spawn_if_needed();
     }
 
+    int getScore() const {
+        if (!game_table) return 0;
+        return game_table->get_score();
+    }
+    
     void draw_game() {
         drawBoard();
         drawPanelBox();
