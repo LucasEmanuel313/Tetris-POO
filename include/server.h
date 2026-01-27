@@ -1,6 +1,7 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+#include <memory>
 #include <string>
 
 #define WIN32_LEAN_AND_MEAN
@@ -9,15 +10,19 @@
 
 struct ServerState;
 
+struct ServerStateDeleter {
+    void operator()(ServerState* p) const;
+};
+
 struct ServerHandle {
-    ServerState* state = nullptr;
+    std::unique_ptr<ServerState, ServerStateDeleter> state;
     HANDLE thread = nullptr;
 };
 
-// Inicia o servidor em uma thread. Retorna true se ficou "ready".
+// Starts the server on a background thread. Returns true if it becomes "ready".
 bool startServer(int port, ServerHandle& out, std::string& error);
 
-// Para o servidor (se estiver rodando) e libera recursos.
+// Stops the server (if running) and releases resources.
 void stopServer(ServerHandle& handle);
 
 #endif

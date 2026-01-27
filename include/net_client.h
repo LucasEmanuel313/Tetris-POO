@@ -8,7 +8,7 @@
 
 bool sendLine(SOCKET s, const std::string& line);
 
-// Connect SEM getaddrinfo (compatível)
+// Connect without getaddrinfo (compatibility)
 bool connectToServer(const std::string& host, int port, SOCKET& outSock);
 
 #endif

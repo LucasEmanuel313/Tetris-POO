@@ -1,5 +1,7 @@
 #include "Multiplayer.h"
 
+// Convert a user-entered host string into an IPv4 address.
+// Accepts both "127.0.0.1" style IPs and DNS names (via gethostbyname).
 static bool resolveHostIPv4(const std::string& host, sockaddr_in& outAddr) {
     outAddr = sockaddr_in{};
     outAddr.sin_family = AF_INET;
@@ -53,6 +55,11 @@ void SfmlMultiplayer::startClient(const std::string& ip, int port, bool host) {
 }
 
 void SfmlMultiplayer::beginConnect(const std::string& ip, int port, bool host) {
+    // Connection setup is done as a small state machine:
+    // - We start a non-blocking connect() to keep the UI responsive.
+    // - While the OS is still connecting, `mode == Connecting` and we poll.
+    // - When it succeeds/fails, we either start the session or return to the menu.
+
     // reset/cleanup any previous session
     backToMainMenuRequested = false;
     pauseConfirmActive = false;
@@ -76,7 +83,7 @@ void SfmlMultiplayer::beginConnect(const std::string& ip, int port, bool host) {
         return;
     }
 
-    // non-blocking connect
+    // Non-blocking connect: avoids freezing the menu on unreachable IPs.
     u_long nb = 1;
     if (ioctlsocket(s, FIONBIO, &nb) != 0) {
         closesocket(s);
@@ -114,6 +121,9 @@ bool SfmlMultiplayer::pollConnect(bool& outConnected, std::string& outError) {
         return true;
     }
 
+    // On Windows, a non-blocking connect completes when the socket becomes
+    // writable (or reports an error). We use select() + getsockopt(SO_ERROR)
+    // to detect the final result without blocking.
     fd_set wfds;
     FD_ZERO(&wfds);
     FD_SET(sock, &wfds);
@@ -169,6 +179,8 @@ void SfmlMultiplayer::startSessionAfterConnect() {
 }
 
 void SfmlMultiplayer::processLine(const std::string& line) {
+    // The server sends line-based commands. Each command may update the local
+    // state machine (Mode) or update remote data (opponent board snapshot).
     if (line == "WAITING") {
         started = false;
         initialized = false;
@@ -213,7 +225,7 @@ void SfmlMultiplayer::processLine(const std::string& line) {
         int n = 0;
         try { n = std::stoi(line.substr(8)); } catch (...) { n = 0; }
         if (n > 0) {
-            // lixo recebido agora fica pendente (aplica quando a peça travar)
+            // Incoming garbage is queued and applied when the current piece locks.
             pendingIncomingGarbage += n;
         }
         return;
@@ -264,6 +276,10 @@ void SfmlMultiplayer::processLine(const std::string& line) {
 void SfmlMultiplayer::pumpNetwork() {
     if (sock == INVALID_SOCKET) return;
 
+    // Non-blocking receive loop:
+    // - read as much as possible
+    // - stop when recv() would block
+    // - split by '\n' into protocol lines
     char temp[512];
     while (true) {
         int r = recv(sock, temp, sizeof(temp), 0);
@@ -329,7 +345,7 @@ SfmlMultiplayer::SfmlMultiplayer(const sf::Font& font, sf::RenderWindow& window)
 }
 
 void SfmlMultiplayer::onEnter() {
-    // Evita que o mesmo clique que trocou o estado do menu acione um botão aqui.
+    // Prevent the click that switched states from immediately triggering a button.
     enterCooldownFrames = 2;
 }
 
@@ -381,7 +397,7 @@ void SfmlMultiplayer::handleEvent(const sf::Event& ev, sf::RenderWindow& window)
                 setStatus("Choose Host or Join");
                 return;
             }
-            // sai do multiplayer
+            // Leave multiplayer.
             if (sock != INVALID_SOCKET) sendLine(sock, "LEAVE");
             running = false;
         }
@@ -390,6 +406,7 @@ void SfmlMultiplayer::handleEvent(const sf::Event& ev, sf::RenderWindow& window)
 
 bool SfmlMultiplayer::update(Mouse& mouse) {
     if (mode == Mode::Connecting) {
+        // While connecting we keep the UI alive: allow Cancel + timeout.
         cancelConnectBtn.Update(mouse);
         if (cancelConnectBtn.getOnRelease()) {
             closeSock();
@@ -424,7 +441,7 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
         return false;
     }
 
-    // network tick
+    // Network tick
     if (running) pumpNetwork();
     if (running == false && mode != Mode::Menu) {
         closeSock();
@@ -433,8 +450,11 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
         setStatus("Disconnected.");
     }
 
-    // logic: playing
+    // Game logic (playing)
     if (mode == Mode::Playing) {
+        // Important UX detail:
+        // - In multiplayer, the pause confirm only disables LOCAL controls.
+        // - The match (gravity + networking) keeps running in the background.
         auto now = clock::now();
         if (now - lastFall >= fallInterval) {
             ta.block_descend();
@@ -455,7 +475,7 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
         }
 
-        // controles
+        // Local controls
         if (!pauseConfirmActive) {
             localRenderer.HandleEvents();
         }

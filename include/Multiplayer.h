@@ -21,6 +21,14 @@
 #include "server.h"
 #include "table.h"
 
+// Multiplayer module overview:
+// - `SfmlMultiplayer` is a high-level "controller" for the multiplayer screen.
+//   It owns the UI widgets (buttons/text fields), the local game model (`table`),
+//   and the networking connection (a TCP socket to the server).
+// - The server speaks a simple line-based protocol (see server.cpp).
+// - Rendering is split: `SfmlGame` draws the local board, and
+//   `SfmlOpponentRenderer` draws a remote board snapshot received from network.
+
 struct SfmlOpponentState {
     bool hasBoard = false;
     int score = 0;
@@ -81,6 +89,7 @@ public:
 
 class SfmlMultiplayer {
 public:
+    // Main UI/state machine states for this screen.
     enum class Mode {
         Menu,
         Connecting,
@@ -95,7 +104,7 @@ public:
     };
 
 private:
-    // UI
+    // UI (view + input widgets)
     Button hostBtn;
     Button joinBtn;
     Button backBtn;
@@ -108,7 +117,10 @@ private:
     sf::Text title;
     sf::Text hint;
 
-    // networking
+    // Networking
+    // - When hosting, we start a local server thread (`ServerHandle`).
+    // - Whether hosting or joining, we create a client TCP socket (`sock`).
+    // - `pumpNetwork()` reads data, splits by '\n', then calls `processLine()`.
     ServerHandle server;
     bool hosting = false;
     SOCKET sock = INVALID_SOCKET;
@@ -129,10 +141,11 @@ private:
 
     std::string rxBuffer;
 
-    // gameplay
+    // Gameplay model/state for the local player.
     table ta;
     SfmlOpponentState opp;
 
+    // Renderers (view)
     SfmlGame localRenderer;
     SfmlOpponentRenderer oppRenderer;
 
@@ -174,7 +187,7 @@ public:
     void onEnter();
     void handleEvent(const sf::Event& ev, sf::RenderWindow& window);
 
-    // retorna true se quiser voltar pro menu principal
+    // Returns true when the multiplayer screen requests to go back to the main menu.
     bool update(Mouse& mouse);
     void draw(sf::RenderWindow& window);
 };

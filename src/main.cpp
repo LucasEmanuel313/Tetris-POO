@@ -27,6 +27,8 @@ static bool tryLoadTexture(sf::Texture& tex) {
 }
 
 static void applyLetterboxView(sf::RenderWindow& window, float baseWidth, float baseHeight) {
+    // Graphics note: we keep a fixed "virtual resolution" (baseWidth/baseHeight)
+    // and letterbox/pillarbox the view to preserve aspect ratio when resizing.
     sf::View view;
     view.setSize({baseWidth, baseHeight});
     view.setCenter({baseWidth / 2.f, baseHeight / 2.f});
@@ -60,6 +62,7 @@ static void applyLetterboxView(sf::RenderWindow& window, float baseWidth, float 
 }
 
 void changeFallInterval(std::chrono::milliseconds& fallInterval, int score) {
+    // Simple difficulty scaling: every 100 score = +1 level = faster gravity.
     int level = score / 100;
     fallInterval = std::chrono::milliseconds(500-(level*15));
     if (fallInterval < std::chrono::milliseconds(100)) {
@@ -81,6 +84,8 @@ int main() {
 
     applyLetterboxView(window, 1200.f, 800.f);
 
+    // High-level program state machine ("which screen am I on?")
+    // MENU -> SINGLEPLAYER / MULTIPLAYER -> GAME_OVER -> ...
     GameState current_state = GameState::MENU;
     bool exitRequested = false;
 
@@ -98,6 +103,8 @@ int main() {
 
     MusicManager musicManager;
 
+    // Core gameplay model (the board + active piece).
+    // The SFML render/controller classes operate on this model.
     table ta;
     ta.add_block();
 
@@ -113,6 +120,7 @@ int main() {
     const auto fallInterval = std::chrono::milliseconds(500);
 
     while (window.isOpen()) {
+        // Input phase: poll SFML events and dispatch to the active state.
         while (auto event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) {
                 window.close();
@@ -128,6 +136,7 @@ int main() {
             }
 
             if (current_state == GameState::SINGLEPLAYER) {
+                // Singleplayer pause confirm: freezes gameplay updates while active.
                 if (const auto* kp = event->getIf<sf::Event::KeyPressed>()) {
                     if (!singlePauseConfirm && kp->code == sf::Keyboard::Key::Escape) {
                         singlePauseConfirm = true;
@@ -185,6 +194,7 @@ int main() {
 
         auto now = clock::now();
         if (current_state == GameState::SINGLEPLAYER) {
+            // Update phase (singleplayer): gravity tick + player inputs.
             if (!singlePauseConfirm) {
                 if (now - lastFall >= fallInterval) {
                     ta.block_descend();
@@ -201,7 +211,7 @@ int main() {
             }
         }
 
-        // render
+        // Render phase: draw the active screen (menu, game, multiplayer, overlays).
         window.clear(sf::Color::White);
         if (bgSprite.has_value()) window.draw(*bgSprite);
 

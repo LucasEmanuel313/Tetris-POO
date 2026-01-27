@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <deque>
+#include <memory>
 #include <random>
 #include <string>
 #include <vector>
@@ -14,18 +15,18 @@ class table {
 
 private:
     static constexpr int kCols = 10;
-    static constexpr int kRows = 22;              // linhas visíveis (0..21)
-    static constexpr int kSpawnBufferRows = 4;    // "linhas ocultas" para spawn acima do topo
+    static constexpr int kRows = 22;              // visible rows (0..21)
+    static constexpr int kSpawnBufferRows = 4;    // hidden spawn buffer above the visible top
     static constexpr int kMaxActiveY = kRows + kSpawnBufferRows - 1; // 25
     static constexpr int kSpawnX = 3;
-    static constexpr int kSpawnY = kRows;         // nasce acima do topo visível
+    static constexpr int kSpawnY = kRows;         // spawns above the visible top
 
     char positions[kCols][kRows];
     int  profile[kCols];
-    block* current_block = nullptr;
+    std::unique_ptr<block> current_block;
 
-    // Para UI (SFML): tipo do bloco FIXO em cada célula.
-    // -1 = vazio; 0..6 = tetromino; 7 = garbage.
+    // For UI (SFML): fixed cell type in each grid position.
+    // -1 = empty; 0..6 = tetromino; 7 = garbage.
     static constexpr unsigned char kEmptyType = 255;
     static constexpr unsigned char kGarbageType = 7;
     unsigned char fixedType[kCols][kRows];
@@ -35,21 +36,21 @@ private:
 
     int score = 0;
 
-    // Next/Hold (estilo Tetris)
+    // Next/Hold (modern Tetris style)
     static constexpr int kNextPreviewCount = 3;
     std::mt19937 rng;
     std::vector<int> bag;
     std::deque<int> nextQueue;
-    int holdType = -1;          // -1 = vazio
-    bool holdUsedThisTurn = false; // só pode segurar 1x por peça
+    int holdType = -1;          // -1 = empty
+    bool holdUsedThisTurn = false; // can only hold once per active piece
 
-    // Quando uma peça trava, deixamos a próxima nascer depois (p/ aplicar garbage entre peças)
+    // When a piece locks, delay spawning the next one (so we can apply incoming garbage between pieces).
     bool needsSpawn = false;
 
-    // evento: linhas limpas desde a última leitura (para mandar ao servidor)
+    // Event: cleared lines since last read (used by multiplayer/server).
     int lastClearedEvent = 0;
 
-    // evento: peça travou (landing) desde a última leitura
+    // Event: piece locked (landing) since last read.
     int lastLandedEvent = 0;
 
     int right_most_col_of_piece() const;
@@ -78,25 +79,25 @@ public:
 
     int get_score() const;
 
-    // Tipo do bloco fixo para UI: -1 vazio, 0..6 tetromino, 7 garbage
+    // Fixed cell type for UI: -1 empty, 0..6 tetromino, 7 garbage.
     int get_fixed_type(int x, int y) const;
 
-    // --- Helpers para renderização (SFML) ---
+    // --- Rendering helpers (SFML) ---
     const block* get_current_block() const;
     int get_block_x_pos() const;
     int get_block_y_pos() const;
 
-    // Retorna apenas o tabuleiro FIXO (sem a peça atual), para o renderer desenhar a peça separadamente.
+    // Returns only the fixed board (without the active piece), so the renderer can draw the piece separately.
     char get_fixed_cell(int x, int y) const;
 
-    // Calcula onde a peça cairia (ghost) sem alterar o estado do jogo.
+    // Computes the ghost Y position without mutating game state.
     int get_ghost_y() const;
 
     int get_hold_type() const;
     std::vector<int> get_next_types(int count) const;
 
-    // Multiplayer: serializa o tabuleiro (inclui a peça atual, pois ela está em positions)
-    // Formato: 22 linhas (y=0..21) * 10 colunas (x=0..9), '.' vazio, '#' preenchido
+    // Multiplayer: serializes the board. Includes the active piece because it is drawn into positions[].
+    // Format: 22 rows (y=0..21) * 10 cols (x=0..9), '.' empty, '0'..'6' filled type.
     std::string serialize_board() const;
 
     void update_table();
@@ -115,14 +116,14 @@ public:
 
     bool is_game_over() const;
 
-    // --- Multiplayer hook: recebe lixo do servidor ---
+    // --- Multiplayer hook: receives garbage from the server ---
     void apply_garbage(int n);
 
-    // --- Multiplayer hook: quantas linhas limpei desde a última leitura ---
+    // --- Multiplayer hook: how many lines were cleared since last read ---
     int pop_cleared_lines_event();
     int pop_landed_event();
 
-    // Reseta o estado do tabuleiro. Se spawn=true, já nasce uma peça.
+    // Resets the board state. If spawn=true, spawns a piece immediately.
     void reset(bool spawn = true);
 };
 

@@ -50,11 +50,11 @@ int table::check_and_clear_lines() {
 }
 
 void table::handle_landing() {
-	// landing ocorreu (a peça não conseguiu descer mais)
+	// Landing occurred: the active piece can no longer descend.
 	lastLandedEvent += 1;
 
-	// A peça atual já está desenhada em positions[] (apenas parte visível) como '#'.
-	// Agora marcamos os tipos nas células FIXAS.
+	// The active piece is already drawn into positions[] (visible area only) as '#'.
+	// Now we commit its type into fixedType[] so the renderer can colorize cells.
 	if (current_block) {
 		int t = current_block->type();
 		if (t < 0) t = 0;
@@ -76,7 +76,7 @@ void table::handle_landing() {
 			}
 		}
 
-		// Se a peça travou com qualquer bloco acima do topo visível, é GAME OVER.
+		// If the piece locks with any block above the visible top, it's GAME OVER.
 		if (lockedAboveTop) {
 			gameOver = true;
 			return;
@@ -85,7 +85,7 @@ void table::handle_landing() {
 
 	int lines = check_and_clear_lines();
 	if (lines < 0) lines = 0;
-	if (lines > 4) lines = 4; // por jogada, o máximo em Tetris é 4
+	if (lines > 4) lines = 4; // per lock, the maximum in Tetris is 4
 	lastClearedEvent += lines;
 
 	switch (lines) {
@@ -96,10 +96,9 @@ void table::handle_landing() {
 		default: break;
 	}
 
-	// Nova peça
+	// Next piece
 	holdUsedThisTurn = false;
-	delete current_block;
-	current_block = nullptr;
+	current_block.reset();
 	needsSpawn = true;
 }
 
@@ -115,7 +114,7 @@ bool table::collides_here() const {
 				if (y < 0) return true;
 				if (y > kMaxActiveY) return true;
 
-				// acima do topo visível, consideramos vazio (spawn buffer)
+				// Above the visible top we consider it empty (spawn buffer).
 				if (y < kRows) {
 					if (fixedType[x][y] != kEmptyType) return true;
 				}
@@ -177,12 +176,12 @@ int table::pop_next_type() {
 }
 
 std::string table::mini_line_for_type(int type, int miniRowFromTop) {
-	// miniRowFromTop: 0..3 (0 = topo)
+	// miniRowFromTop: 0..3 (0 = top)
 	if (type < 0 || type > 6) return "        ";
 	const char (*p)[4][4] = TETROMINOES[type];
 	std::string out;
 	out.reserve(8);
-	int y = 3 - miniRowFromTop; // converte para o sistema usado no piece (y cresce pra cima)
+	int y = 3 - miniRowFromTop; // convert to the block coordinate system (y grows upward)
 	for (int x = 0; x < 4; ++x) {
 		out += ((*p)[x][y] == '#') ? "[]" : "  ";
 	}
@@ -190,8 +189,8 @@ std::string table::mini_line_for_type(int type, int miniRowFromTop) {
 }
 
 std::string table::side_panel_line_single(int rowIndexFromTop) const {
-	// rowIndexFromTop: 0..21 (0 = topo da tela)
-	// Layout (22 linhas): HOLD(1+4) + blank(1) + NEXT(1 + 3*4 + 2 blanks) = 22
+	// rowIndexFromTop: 0..21 (0 = top of the screen)
+	// Layout (22 rows): HOLD(1+4) + blank(1) + NEXT(1 + 3*4 + 2 blanks) = 22
 	if (rowIndexFromTop == 0) return "HOLD";
 	if (rowIndexFromTop >= 1 && rowIndexFromTop <= 4) {
 		if (holdType < 0) return (rowIndexFromTop == 1) ? "(none)" : "";
@@ -202,7 +201,7 @@ std::string table::side_panel_line_single(int rowIndexFromTop) const {
 
 	int base = 7;
 	for (int n = 0; n < kNextPreviewCount; ++n) {
-		int start = base + n * 5; // 4 linhas + 1 blank entre peças
+		int start = base + n * 5; // 4 rows + 1 blank between pieces
 		int end = start + 3;
 		if (rowIndexFromTop >= start && rowIndexFromTop <= end) {
 			int t = (n < (int)nextQueue.size()) ? nextQueue[n] : -1;
@@ -232,7 +231,7 @@ table::table() {
 }
 
 table::~table() {
-	delete current_block;
+	// current_block is owned by std::unique_ptr
 }
 
 void table::print_table() {
@@ -260,7 +259,7 @@ int table::get_fixed_type(int x, int y) const {
 	return (t == kEmptyType) ? -1 : (int)t;
 }
 
-const block* table::get_current_block() const { return current_block; }
+const block* table::get_current_block() const { return current_block.get(); }
 
 int table::get_block_x_pos() const { return block_x_pos; }
 
@@ -274,16 +273,16 @@ char table::get_fixed_cell(int x, int y) const {
 int table::get_ghost_y() const {
 	if (!current_block) return block_y_pos;
 
-	auto occupied_fixed = [&](int x, int y) -> bool {
+		auto occupied_fixed = [&](int x, int y) -> bool {
 		if (x < 0 || x >= kCols) return true;
 		if (y < 0) return true;
-		if (y >= kRows) return false; // acima do topo visível não tem fixos
+			if (y >= kRows) return false; // above the visible top there are no fixed blocks
 		return fixedType[x][y] != kEmptyType;
 	};
 
 	int ghostY = block_y_pos;
 	while (true) {
-		// tenta descer 1
+		// try to move down by 1
 		bool can = true;
 		for (int i = 0; i < 4 && can; ++i) {
 			for (int j = 0; j < 4 && can; ++j) {
@@ -393,22 +392,22 @@ bool table::can_move(int dx, int dy) {
 void table::add_block() {
 	int type = pop_next_type();
 	try {
-		current_block = make_block(type).release();
+		current_block = make_block(type);
 	} catch (const std::exception&) {
-		// Se algo muito errado acontecer (tipo inválido, falta de memória etc),
-		// encerra a partida de forma segura.
+		// If something goes very wrong (invalid type, allocation failure, etc.),
+		// end the match safely.
 		gameOver = true;
-		current_block = nullptr;
+		current_block.reset();
 		return;
 	}
 	block_x_pos = kSpawnX;
 	block_y_pos = kSpawnY;
 	needsSpawn = false;
 
-	// se já nasce colidindo com o topo/stack, game over imediato
+	// If it spawns already colliding with the stack, it's an immediate game over.
 	if (collides_here()) {
 		gameOver = true;
-		// ainda desenha a peça que tentou nascer (pra não "sumir")
+		// Keep the attempted spawn visible (so it doesn't "disappear").
 		update_table_no_overwrite();
 		return;
 	}
@@ -418,7 +417,7 @@ void table::add_block() {
 void table::spawn_if_needed() {
 	if (gameOver) return;
 	if (!needsSpawn) return;
-	if (current_block != nullptr) return;
+	if (current_block) return;
 	add_block();
 }
 
@@ -429,8 +428,7 @@ void table::hold_block() {
 	int curType = current_block->type();
 
 	block_clear();
-	delete current_block;
-	current_block = nullptr;
+	current_block.reset();
 
 	if (holdType < 0) {
 		holdType = curType;
@@ -439,10 +437,10 @@ void table::hold_block() {
 		int swapType = holdType;
 		holdType = curType;
 		try {
-			current_block = make_block(swapType).release();
+			current_block = make_block(swapType);
 		} catch (const std::exception&) {
 			gameOver = true;
-			current_block = nullptr;
+			current_block.reset();
 			return;
 		}
 		block_x_pos = kSpawnX;
@@ -462,10 +460,10 @@ void table::hold_block() {
 void table::rotate_block() {
 	if (!current_block || gameOver) return;
 
-	// remove a peça atual do grid
+	// Remove the active piece from the grid.
 	block_clear();
 
-	// backup da peça e posição
+	// Backup piece cells and position.
 	char backup[4][4];
 	for (int i = 0; i < 4; ++i)
 		for (int j = 0; j < 4; ++j)
@@ -474,10 +472,10 @@ void table::rotate_block() {
 	int oldX = block_x_pos;
 	int oldY = block_y_pos;
 
-	// rotaciona
+	// Rotate.
 	current_block->rotate();
 
-	// tenta "kicks" (0, empurra pra esquerda, depois direita)
+	// Try wall-kicks (0, then push left, then right).
 	const int kicks[] = { 0, -1, -2, -3, 1, 2, 3 };
 	bool ok = false;
 
@@ -485,14 +483,14 @@ void table::rotate_block() {
 		block_x_pos = oldX + kicks[k];
 		block_y_pos = oldY;
 
-		if (!collides_here()) { // colisão/borda contra FIXOS (fixedType)
+		if (!collides_here()) { // collision/bounds check against fixed blocks (fixedType)
 			ok = true;
 			break;
 		}
 	}
 
 	if (!ok) {
-		// desfaz rotação + posição
+		// Revert rotation and position.
 		block_x_pos = oldX;
 		block_y_pos = oldY;
 		for (int i = 0; i < 4; ++i)
@@ -500,7 +498,7 @@ void table::rotate_block() {
 				current_block->piece[i][j] = backup[i][j];
 	}
 
-	// redesenha a peça (válida ou revertida)
+	// Redraw the piece (valid or reverted).
 	update_table();
 }
 
@@ -556,7 +554,7 @@ void table::apply_garbage(int n) {
 	if (hadActive) block_clear();
 
 	for (int k = 0; k < n; ++k) {
-		// Se já existe algo no topo, subir mais significa estourar o teto.
+		// If the top is already occupied, pushing up would overflow the board.
 		if (top_reached()) {
 			gameOver = true;
 			return;
@@ -573,7 +571,7 @@ void table::apply_garbage(int n) {
 			}
 		}
 
-		// linha lixo em y=0
+		// Garbage line at y=0
 		for (int x = 0; x < kCols; ++x) {
 			positions[x][0] = (x == hole) ? ' ' : '#';
 			fixedType[x][0] = (x == hole) ? kEmptyType : kGarbageType;
@@ -581,8 +579,8 @@ void table::apply_garbage(int n) {
 	}
 
 	if (hadActive) {
-		// checa colisão antes de redesenhar a peça
-		// (se redesenhar primeiro, vai colidir com ela mesma)
+		// Check collision before redrawing the active piece
+		// (if we redraw first, we would collide with ourselves).
 		bool overlap = collides_here();
 		if (overlap) {
 			gameOver = true;
@@ -592,8 +590,8 @@ void table::apply_garbage(int n) {
 		}
 	}
 
-	// Nota: não é game over só por ocupar a linha do topo.
-	// Game over aqui acontece quando o lixo tenta empurrar blocos para fora (checado acima).
+	// Note: it's not game over just because the top row is occupied.
+	// Game over happens when garbage would push blocks beyond the playable space (checked above).
 }
 
 int table::pop_cleared_lines_event() {
@@ -609,8 +607,7 @@ int table::pop_landed_event() {
 }
 
 void table::reset(bool spawn) {
-	delete current_block;
-	current_block = nullptr;
+	current_block.reset();
 
 	for (int i = 0; i < kCols; ++i) {
 		for (int j = 0; j < kRows; ++j) {

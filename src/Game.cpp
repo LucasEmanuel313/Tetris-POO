@@ -57,7 +57,7 @@ void SfmlGame::drawPieceAt(const block* b, int baseX, int baseY, sf::Color color
 }
 
 void SfmlGame::drawBoard() {
-    // 1) blocos fixos (sem a peça atual)
+    // 1) Fixed blocks (without the active piece)
     for (int y = 0; y < GRID_ROWS; ++y) {
         for (int x = 0; x < GRID_COLS; ++x) {
             int t = game_table->get_fixed_type(x, y);
@@ -67,7 +67,7 @@ void SfmlGame::drawBoard() {
         }
     }
 
-    // 2) ghost + peça atual colorida
+    // 2) Ghost + active piece (colored)
     const block* cur = game_table->get_current_block();
     if (!cur) return;
     int type = cur->type();
@@ -102,9 +102,9 @@ void SfmlGame::drawMiniPiece(int type, float x0, float y0) {
 void SfmlGame::drawSidePanels() {
     if (!font) return;
 
-    // UI: mostrar apenas peças futuras.
-    // Topo ("HOLD"): próxima peça (next[0])
-    // Lista ("NEXT"): próximas seguintes (next[1], next[2])
+    // UI: show only future pieces.
+    // Top ("HOLD"): the very next piece (next[0])
+    // List ("NEXT"): the pieces after that (next[1], next[2])
     static constexpr int kTotalPreviewCount = 3;
     static constexpr int kNextListCount = kTotalPreviewCount - 1;
 
@@ -194,7 +194,7 @@ void SfmlGame::HandleEvents() {
 
     for (int i = 0; i < 7; ++i) prevKeyStates[i] = currentKeyStates[i];
 
-    // se a peça travou, a mesa marca needsSpawn
+    // If the piece locked, the table will request a spawn.
     game_table->spawn_if_needed();
 }
 

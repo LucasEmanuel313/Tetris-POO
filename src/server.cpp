@@ -7,27 +7,42 @@
 #include "net_client.h"
 #include "server.h"
 
+// This file implements a very small TCP relay server for a 2-player match.
+//
+// Design notes (OOP / architecture):
+// - `ServerState` is the server's "model" (all runtime state in one place).
+// - The server runs on a dedicated Win32 thread (`serverThreadProc`).
+// - Sockets are put in non-blocking mode and we use `select()` so the thread
+//   can react to new clients and incoming messages without ever blocking forever.
+// - The protocol is line-based: each message is a single line ending with '\n'.
+
 struct ServerState {
     int port = 5555;
     SOCKET listenSock = INVALID_SOCKET;
     SOCKET clients[2]{ INVALID_SOCKET, INVALID_SOCKET };
     std::string buffers[2];
 
-    // rematch: -1 sem voto, 0 nao, 1 sim
+    // Rematch votes: -1 = no vote yet, 0 = no, 1 = yes.
     int rematchVote[2]{ -1, -1 };
     bool matchOver = false;
 
-    volatile LONG ready = 0;    // 1 quando estiver escutando
-    volatile LONG running = 1;  // 1 enquanto servidor ativo
+    volatile LONG ready = 0;    // 1 once the server is listening
+    volatile LONG running = 1;  // 1 while the server is active
 };
 
+void ServerStateDeleter::operator()(ServerState* p) const {
+    delete p;
+}
+
 static int garbageFromCleared(int cleared) {
-    // regra: cada linha limpa envia 1 linha "morta" ao oponente
+    // Rule (simple version): each cleared line sends 1 garbage line.
     if (cleared <= 0) return 0;
     if (cleared > 4) cleared = 4;
     return cleared;
 }
 
+// Parse one incoming protocol line from client `idx`.
+// Return true if this client asked to disconnect ("LEAVE").
 static bool processServerLine(int idx, ServerState* st, const std::string& line) {
     int other = 1 - idx;
 
@@ -49,7 +64,7 @@ static bool processServerLine(int idx, ServerState* st, const std::string& line)
     }
 
     if (line == "LEAVE") {
-        return true; // desconectar este cliente
+        return true; // disconnect this client
     }
 
     if (line.rfind("REMATCH ", 0) == 0) {
@@ -58,7 +73,7 @@ static bool processServerLine(int idx, ServerState* st, const std::string& line)
         if (line == "REMATCH YES") st->rematchVote[idx] = 1;
         else if (line == "REMATCH NO") st->rematchVote[idx] = 0;
 
-        // se alguém disse NÃO, avisa e reseta
+        // If someone said NO, notify the other player and reset.
         if (st->rematchVote[idx] == 0) {
             if (st->clients[other] != INVALID_SOCKET) sendLine(st->clients[other], "REMATCH_ABORT");
             st->rematchVote[0] = -1;
@@ -66,7 +81,7 @@ static bool processServerLine(int idx, ServerState* st, const std::string& line)
             return false;
         }
 
-        // ambos aceitaram
+        // Both accepted.
         if (st->rematchVote[0] == 1 && st->rematchVote[1] == 1) {
             if (st->clients[0] != INVALID_SOCKET) sendLine(st->clients[0], "REMATCH_START");
             if (st->clients[1] != INVALID_SOCKET) sendLine(st->clients[1], "REMATCH_START");
@@ -77,7 +92,7 @@ static bool processServerLine(int idx, ServerState* st, const std::string& line)
         return false;
     }
 
-    // Repasse do estado do tabuleiro para o outro jogador
+    // Forward board state to the other player.
     if (line.rfind("BOARD ", 0) == 0) {
         if (st->clients[other] != INVALID_SOCKET) {
             sendLine(st->clients[other], line);
@@ -119,7 +134,7 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
         return 0;
     }
 
-    // listen non-blocking para aceitar novos guests depois
+    // Non-blocking listen socket: accept() will not stall the whole server thread.
     {
         u_long mode = 1;
         ioctlsocket(st->listenSock, FIONBIO, &mode);
@@ -133,6 +148,7 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
     };
 
     auto acceptClients = [&]() {
+        // Accept as many pending clients as possible (until accept() would block).
         while (true) {
             SOCKET c = accept(st->listenSock, nullptr, nullptr);
             if (c == INVALID_SOCKET) break;
@@ -158,7 +174,7 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
                 sendLine(st->clients[1], "ROLE GUEST");
             }
 
-            // se fechou par, inicia partida
+            // When both slots are filled, the match can start.
             if (st->clients[0] != INVALID_SOCKET && st->clients[1] != INVALID_SOCKET) {
                 st->rematchVote[0] = -1;
                 st->rematchVote[1] = -1;
@@ -169,7 +185,7 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
         }
     };
 
-    // espera pelo host conectar primeiro
+    // Wait for the host to connect first.
     while (InterlockedCompareExchange(&st->running, 1, 1) == 1 && st->clients[0] == INVALID_SOCKET) {
         fd_set readfds;
         FD_ZERO(&readfds);
@@ -188,7 +204,7 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
 
         SOCKET maxfd = st->listenSock;
 
-        // aceita novos clientes (guest) quando existir vaga
+        // Always listen for new clients while a slot is available.
         FD_SET(st->listenSock, &readfds);
         for (int i = 0; i < 2; ++i) {
             if (st->clients[i] != INVALID_SOCKET) {
@@ -224,7 +240,7 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
                 st->rematchVote[1] = -1;
                 st->matchOver = false;
 
-                // se o host saiu, encerra a sala e desconecta o guest
+                // If the host leaves, close the room and disconnect the guest.
                 if (i == 0) {
                     if (st->clients[1] != INVALID_SOCKET) {
                         sendLine(st->clients[1], "OPPONENT_LEFT");
@@ -235,7 +251,7 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
                     break;
                 }
 
-                // se o guest saiu, mantém o host esperando outro
+                // If the guest leaves, keep the host alive and waiting.
                 if (i == 1) {
                     if (st->clients[0] != INVALID_SOCKET) {
                         sendLine(st->clients[0], "OPPONENT_LEFT");
@@ -298,13 +314,14 @@ static DWORD WINAPI serverThreadProc(LPVOID param) {
 bool startServer(int port, ServerHandle& out, std::string& error) {
     error.clear();
 
-    ServerState* st = new ServerState();
+    // `ServerHandle` owns the server state with RAII (`unique_ptr`).
+    // We keep it in a local smart pointer until we're sure the thread started.
+    std::unique_ptr<ServerState, ServerStateDeleter> st(new ServerState());
     st->port = port;
 
     DWORD tid = 0;
-    HANDLE hThread = CreateThread(nullptr, 0, serverThreadProc, st, 0, &tid);
+    HANDLE hThread = CreateThread(nullptr, 0, serverThreadProc, st.get(), 0, &tid);
     if (!hThread) {
-        delete st;
         error = "Could not start server thread.";
         return false;
     }
@@ -319,12 +336,11 @@ bool startServer(int port, ServerHandle& out, std::string& error) {
         InterlockedExchange(&st->running, 0);
         WaitForSingleObject(hThread, INFINITE);
         CloseHandle(hThread);
-        delete st;
         error = "Server failed to start (port in use?).";
         return false;
     }
 
-    out.state = st;
+    out.state = std::move(st);
     out.thread = hThread;
     return true;
 }
@@ -332,6 +348,7 @@ bool startServer(int port, ServerHandle& out, std::string& error) {
 void stopServer(ServerHandle& handle) {
     if (!handle.state) return;
 
+    // Cooperative shutdown: tell the thread to stop, then join it.
     InterlockedExchange(&handle.state->running, 0);
 
     if (handle.thread) {
@@ -340,6 +357,5 @@ void stopServer(ServerHandle& handle) {
         handle.thread = nullptr;
     }
 
-    delete handle.state;
-    handle.state = nullptr;
+    handle.state.reset();
 }

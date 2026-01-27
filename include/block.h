@@ -1,6 +1,6 @@
 #include <cstddef>
-#include <cstdlib> // Para rand() e srand()
-#include <ctime>   // Para time()
+#include <cstdlib> // rand(), srand()
+#include <ctime>   // time()
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -11,56 +11,56 @@
 
 inline constexpr char PIECE_I[4][4] = {
     {' ', ' ', ' ', ' '},
-    {'#', '#', '#', '#'}, // Quatro blocos em linha
+    {'#', '#', '#', '#'}, // Four blocks in a line
     {' ', ' ', ' ', ' '},
     {' ', ' ', ' ', ' '}
 };
 
-// Peça J (Jota)
+// J piece
 inline constexpr char PIECE_J[4][4] = {
     {' ', ' ', ' ', ' '},
     {'#', '#', '#', ' '},
-    {' ', ' ', '#', ' '}, // O 'canto' no topo direito
+    {' ', ' ', '#', ' '}, // Corner on the top-right
     {' ', ' ', ' ', ' '}
 };
 
-// Peça L (Éle)
+// L piece
 inline constexpr char PIECE_L[4][4] = {
     {' ', ' ', ' ', ' '},
     {'#', '#', '#', ' '},
-    {'#', ' ', ' ', ' '}, // O 'canto' no topo esquerdo
+    {'#', ' ', ' ', ' '}, // Corner on the top-left
     {' ', ' ', ' ', ' '}
 };
 
-// Peça O (Quadrado)
+// O piece (square)
 inline constexpr char PIECE_O[4][4] = {
     {' ', ' ', ' ', ' '},
     {' ', '#', '#', ' '},
-    {' ', '#', '#', ' '}, // 2x2 centralizado
+    {' ', '#', '#', ' '}, // Centered 2x2
     {' ', ' ', ' ', ' '}
 };
 
-// Peça S (Ese)
+// S piece
 inline constexpr char PIECE_S[4][4] = {
     {' ', ' ', ' ', ' '},
     {' ', '#', '#', ' '},
-    {'#', '#', ' ', ' '}, // Forma de Z (ou S)
+    {'#', '#', ' ', ' '}, // S/Z-style shape
     {' ', ' ', ' ', ' '}
 };
 
-// Peça T (Tê)
+// T piece
 inline constexpr char PIECE_T[4][4] = {
     {' ', ' ', ' ', ' '},
     {'#', '#', '#', ' '},
-    {' ', '#', ' ', ' '}, // Bloco extra no meio
+    {' ', '#', ' ', ' '}, // Extra block in the middle
     {' ', ' ', ' ', ' '}
 };
 
-// Peça Z (Zeta)
+// Z piece
 inline constexpr char PIECE_Z[4][4] = {
     {' ', ' ', ' ', ' '},
     {'#', '#', ' ', ' '},
-    {' ', '#', '#', ' '}, // Forma de S (ou Z)
+    {' ', '#', '#', ' '}, // S/Z-style shape
     {' ', ' ', ' ', ' '}
 };
 
@@ -116,24 +116,22 @@ class block {
 
         virtual ~block() = default;
         void make_profile() {
-    // Itera por COLUNAS (i)
+    // Compute the lowest occupied cell per column (used for collision/landing).
     for (int i = 0; i < 4; i++) {
         
-        // Define o valor padrão para uma coluna vazia
-        // (Ex: -1 se nenhuma peça for encontrada, ou 4 se você quiser a altura real)
-        // Usarei -1 para indicar "vazio"
+        // Default for an empty column: -1 means "no block in this column".
         profile[i] = -1; 
         
-        // Itera por colunas de BAIXO para CIMA (de 3 a 0)
+        // Scan from bottom to top.
         for (int j = 0; j < 4; j++) { 
             
-            // Verifica se a posição atual [Linha j][Coluna i] tem um bloco
+            // If there's a block, this is the lowest one.
             if (piece[i][j] == '#') {
                 
-                // Armazena a linha j (o bdloco MAIS BAIXO) como o perfil
+                // Store the row index of the lowest block.
                 profile[i] = j; 
                 
-                // Como encontramos o bloco mais baixo, paramos a iteração desta coluna
+                // Stop once we found the lowest block.
                 break; 
             }
         }
@@ -165,10 +163,9 @@ class block {
             }
         }
 
-        // Constrói um tetromino específico (0..6)
+        // Builds a specific tetromino (0..6).
         block(int tetrominoIndex){
-            // Mantém compatibilidade com o código antigo: se vier inválido,
-            // vamos normalizar (sem lançar) para não quebrar o jogo.
+            // Keep compatibility with older code: normalize invalid values instead of throwing.
             if (tetrominoIndex < 0) tetrominoIndex = 0;
             if (tetrominoIndex >= kTetrominoTypeCount) tetrominoIndex = kTetrominoTypeCount - 1;
             type_ = tetrominoIndex;
@@ -186,7 +183,7 @@ class block {
                 srand(static_cast<unsigned int>(time(0)));
                 seeded = true;
             }
-            int random_index = rand() % 7; // Gera um índice aleatório entre 0 e 6
+            int random_index = rand() % 7; // Random index between 0 and 6
             type_ = random_index;
             const char (*selected_piece)[4][4] = TETROMINOES[random_index];
             for (size_t i = 0; i < 4; i++) {
@@ -197,7 +194,7 @@ class block {
         }
 };
 
-// --- Herança: cada tetromino é um tipo derivado ---
+// --- Inheritance: each tetromino is a derived type ---
 template<int Type>
 class TetrominoBlock : public block {
 public:
@@ -207,7 +204,7 @@ public:
     }
 };
 
-// Exemplo de especialização via herança: O não muda ao rotacionar.
+// Special-case: the O piece doesn't change when rotating.
 template<>
 class TetrominoBlock<3> : public block {
 public:
