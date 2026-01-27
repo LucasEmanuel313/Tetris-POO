@@ -1,22 +1,4 @@
-#include "Multiplayer.h"
-
-static bool resolveHostIPv4(const std::string& host, sockaddr_in& outAddr) {
-    outAddr = sockaddr_in{};
-    outAddr.sin_family = AF_INET;
-
-    unsigned long ip = inet_addr(host.c_str());
-    if (ip != INADDR_NONE) {
-        outAddr.sin_addr.s_addr = ip;
-        return true;
-    }
-
-    hostent* he = gethostbyname(host.c_str());
-    if (!he || !he->h_addr_list || !he->h_addr_list[0]) {
-        return false;
-    }
-    outAddr.sin_addr = *reinterpret_cast<in_addr*>(he->h_addr_list[0]);
-    return true;
-}
+#include "SfmlMultiplayer.h"
 
 void SfmlMultiplayer::closeSock() {
     if (sock != INVALID_SOCKET) {
@@ -49,109 +31,17 @@ void SfmlMultiplayer::applyMenuLayout() {
 }
 
 void SfmlMultiplayer::startClient(const std::string& ip, int port, bool host) {
-    beginConnect(ip, port, host);
-}
-
-void SfmlMultiplayer::beginConnect(const std::string& ip, int port, bool host) {
-    // reset/cleanup any previous session
-    backToMainMenuRequested = false;
-    pauseConfirmActive = false;
-    running = false;
-    closeSock();
-
     isHost = host;
     sessionIp = ip;
     sessionPort = port;
 
-    sockaddr_in addr{};
-    if (!resolveHostIPv4(ip, addr)) {
-        setStatus("Could not resolve host.");
-        return;
-    }
-    addr.sin_port = htons((u_short)port);
-
-    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s == INVALID_SOCKET) {
-        setStatus("socket() failed.");
+    SOCKET s = INVALID_SOCKET;
+    if (!connectToServer(ip, port, s)) {
+        setStatus("Failed to connect.");
         return;
     }
 
-    // non-blocking connect
-    u_long nb = 1;
-    if (ioctlsocket(s, FIONBIO, &nb) != 0) {
-        closesocket(s);
-        setStatus("ioctlsocket(FIONBIO) failed.");
-        return;
-    }
-
-    int rc = connect(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
-    if (rc == 0) {
-        sock = s;
-        startSessionAfterConnect();
-        return;
-    }
-
-    const int err = WSAGetLastError();
-    if (err == WSAEWOULDBLOCK || err == WSAEINPROGRESS || err == WSAEALREADY) {
-        sock = s;
-        connectStart = clock::now();
-        mode = Mode::Connecting;
-        cancelConnectBtn.setPosition({500.f, 520.f});
-        setStatus("Connecting... (Cancel to abort)");
-        return;
-    }
-
-    closesocket(s);
-    setStatus("Failed to connect.");
-}
-
-bool SfmlMultiplayer::pollConnect(bool& outConnected, std::string& outError) {
-    outConnected = false;
-    outError.clear();
-
-    if (sock == INVALID_SOCKET) {
-        outError = "No socket.";
-        return true;
-    }
-
-    fd_set wfds;
-    FD_ZERO(&wfds);
-    FD_SET(sock, &wfds);
-
-    fd_set efds;
-    FD_ZERO(&efds);
-    FD_SET(sock, &efds);
-
-    timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-
-    int r = select(0, nullptr, &wfds, &efds, &tv);
-    if (r == 0) {
-        return false; // still connecting
-    }
-    if (r == SOCKET_ERROR) {
-        outError = "select() failed.";
-        return true;
-    }
-
-    int soError = 0;
-    int soErrorLen = sizeof(soError);
-    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&soError), &soErrorLen) == SOCKET_ERROR) {
-        outError = "getsockopt(SO_ERROR) failed.";
-        return true;
-    }
-
-    if (soError != 0) {
-        outError = "connect() failed.";
-        return true;
-    }
-
-    outConnected = true;
-    return true;
-}
-
-void SfmlMultiplayer::startSessionAfterConnect() {
+    sock = s;
     running = true;
     started = false;
     initialized = false;
@@ -296,7 +186,6 @@ SfmlMultiplayer::SfmlMultiplayer(const sf::Font& font, sf::RenderWindow& window)
       joinBtn(font, {500.f, 330.f}, "Join"),
       backBtn(font, {500.f, 410.f}, "Back"),
       connectBtn(font, {500.f, 490.f}, "Connect"),
-    cancelConnectBtn(font, {500.f, 520.f}, "Cancel"),
       ipField(font, {460.f, 250.f}, {280.f, 40.f}),
       portField(font, {460.f, 310.f}, {280.f, 40.f}),
       title(font),
@@ -348,34 +237,7 @@ void SfmlMultiplayer::handleEvent(const sf::Event& ev, sf::RenderWindow& window)
     }
 
     if (const auto* kp = ev.getIf<sf::Event::KeyPressed>()) {
-        if (mode == Mode::Playing || mode == Mode::Waiting) {
-            if (!pauseConfirmActive && kp->code == sf::Keyboard::Key::Escape) {
-                pauseConfirmActive = true;
-                return;
-            }
-            if (pauseConfirmActive) {
-                if (kp->code == sf::Keyboard::Key::Y) {
-                    if (sock != INVALID_SOCKET) sendLine(sock, "LEAVE");
-                    running = false;
-                    pauseConfirmActive = false;
-                    backToMainMenuRequested = true;
-                    return;
-                }
-                if (kp->code == sf::Keyboard::Key::N || kp->code == sf::Keyboard::Key::Escape) {
-                    pauseConfirmActive = false;
-                    return;
-                }
-            }
-        }
-
         if (kp->code == sf::Keyboard::Key::Escape) {
-            if (mode == Mode::Connecting) {
-                closeSock();
-                mode = Mode::Menu;
-                menuPane = MenuPane::JoinForm;
-                setStatus("Connection cancelled.");
-                return;
-            }
             if (mode == Mode::Menu && menuPane != MenuPane::Root) {
                 menuPane = MenuPane::Root;
                 setStatus("Choose Host or Join");
@@ -389,41 +251,6 @@ void SfmlMultiplayer::handleEvent(const sf::Event& ev, sf::RenderWindow& window)
 }
 
 bool SfmlMultiplayer::update(Mouse& mouse) {
-    if (mode == Mode::Connecting) {
-        cancelConnectBtn.Update(mouse);
-        if (cancelConnectBtn.getOnRelease()) {
-            closeSock();
-            mode = Mode::Menu;
-            menuPane = MenuPane::JoinForm;
-            setStatus("Connection cancelled.");
-            return false;
-        }
-
-        const auto now = clock::now();
-        if (now - connectStart >= connectTimeout) {
-            closeSock();
-            mode = Mode::Menu;
-            menuPane = MenuPane::JoinForm;
-            setStatus("Connection timed out.");
-            return false;
-        }
-
-        bool connected = false;
-        std::string err;
-        const bool finished = pollConnect(connected, err);
-        if (finished) {
-            if (connected) {
-                startSessionAfterConnect();
-            } else {
-                closeSock();
-                mode = Mode::Menu;
-                menuPane = MenuPane::JoinForm;
-                setStatus("Failed to connect.");
-            }
-        }
-        return false;
-    }
-
     // network tick
     if (running) pumpNetwork();
     if (running == false && mode != Mode::Menu) {
@@ -456,9 +283,7 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
         }
 
         // controles
-        if (!pauseConfirmActive) {
-            localRenderer.HandleEvents();
-        }
+        localRenderer.HandleEvents();
 
         int cleared = ta.pop_cleared_lines_event();
         if (cleared > 0) sendLine(sock, "CLEARED " + std::to_string(cleared));
@@ -548,11 +373,6 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
         }
     }
 
-    if (backToMainMenuRequested) {
-        backToMainMenuRequested = false;
-        return true;
-    }
-
     return false;
 }
 
@@ -572,16 +392,16 @@ void SfmlMultiplayer::draw(sf::RenderWindow& window) {
             sf::Text ipLabel(title);
             ipLabel.setString("IP:");
             ipLabel.setCharacterSize(18);
-            ipLabel.setFillColor(sf::Color::White);
+                ipLabel.setFillColor(sf::Color::White);
             ipLabel.setPosition({380.f, 255.f});
-            drawTextWithBox(window, ipLabel, 6.f, kHudBg, kHudOutline, 2.f);
+                drawTextWithBox(window, ipLabel, 6.f, kHudBg, kHudOutline, 2.f);
 
             sf::Text portLabel(title);
             portLabel.setString("Port:");
             portLabel.setCharacterSize(18);
-            portLabel.setFillColor(sf::Color::White);
+                portLabel.setFillColor(sf::Color::White);
             portLabel.setPosition({380.f, 315.f});
-            drawTextWithBox(window, portLabel, 6.f, kHudBg, kHudOutline, 2.f);
+                drawTextWithBox(window, portLabel, 6.f, kHudBg, kHudOutline, 2.f);
 
             ipField.draw(window);
             portField.draw(window);
@@ -589,17 +409,6 @@ void SfmlMultiplayer::draw(sf::RenderWindow& window) {
             connectBtn.draw(window);
             backBtn.draw(window);
         }
-    }
-    else if (mode == Mode::Connecting) {
-        sf::Text t(title);
-        t.setFillColor(sf::Color::White);
-        t.setString(statusLine + "\n" + sessionIp + ":" + std::to_string(sessionPort));
-        t.setCharacterSize(28);
-        wrapTextToWidth(t, 1040.f);
-        t.setPosition({80.f, 180.f});
-        drawTextWithBox(window, t, 12.f, kHudBg, kHudOutline, 2.f);
-
-        cancelConnectBtn.draw(window);
     }
     else if (mode == Mode::Waiting) {
         sf::Text t(title);
@@ -649,20 +458,6 @@ void SfmlMultiplayer::draw(sf::RenderWindow& window) {
 
         rematchBtn.draw(window);
         leaveBtn.draw(window);
-    }
-
-    if (pauseConfirmActive && (mode == Mode::Playing || mode == Mode::Waiting)) {
-        sf::RectangleShape overlay;
-        overlay.setSize({1200.f, 800.f});
-        overlay.setFillColor(sf::Color(0, 0, 0, 140));
-        window.draw(overlay);
-
-        sf::Text msg(title);
-        msg.setString("Exit to menu?\nY = yes\nN = no");
-        msg.setCharacterSize(32);
-        msg.setFillColor(sf::Color::White);
-        msg.setPosition({390.f, 320.f});
-        drawTextWithBox(window, msg, 14.f, kHudBg, kHudOutline, 2.f);
     }
 
     hint.setFillColor(sf::Color::White);

@@ -18,12 +18,11 @@
 #include "table.h"
 
 static bool tryLoadFont(sf::Font& font) {
-    return font.openFromFile("assets/Tetris.ttf") || font.openFromFile("../assets/Tetris.ttf");
+    return font.openFromFile("Tetris.ttf");
 }
 
 static bool tryLoadTexture(sf::Texture& tex) {
-    return tex.loadFromFile("assets/Images/Background_Tetris.jpg") ||
-           tex.loadFromFile("../assets/Images/Background_Tetris.jpg");
+    return tex.loadFromFile("Images/Background_Tetris.jpg");
 }
 
 static void applyLetterboxView(sf::RenderWindow& window, float baseWidth, float baseHeight) {
@@ -86,7 +85,7 @@ int main() {
 
     sf::Font font;
     if (!tryLoadFont(font)) {
-        std::cerr << "Warning: could not load assets/Tetris.ttf.\n";
+        std::cerr << "Warning: could not load Tetris.ttf (tried root and tomerge).\n";
     }
 
     sf::Texture bgTexture;
