@@ -392,7 +392,15 @@ bool table::can_move(int dx, int dy) {
 
 void table::add_block() {
 	int type = pop_next_type();
-	current_block = new block(type);
+	try {
+		current_block = make_block(type).release();
+	} catch (const std::exception&) {
+		// Se algo muito errado acontecer (tipo inválido, falta de memória etc),
+		// encerra a partida de forma segura.
+		gameOver = true;
+		current_block = nullptr;
+		return;
+	}
 	block_x_pos = kSpawnX;
 	block_y_pos = kSpawnY;
 	needsSpawn = false;
@@ -430,7 +438,13 @@ void table::hold_block() {
 	} else {
 		int swapType = holdType;
 		holdType = curType;
-		current_block = new block(swapType);
+		try {
+			current_block = make_block(swapType).release();
+		} catch (const std::exception&) {
+			gameOver = true;
+			current_block = nullptr;
+			return;
+		}
 		block_x_pos = kSpawnX;
 		block_y_pos = kSpawnY;
 

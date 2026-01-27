@@ -53,7 +53,7 @@ public:
 #endif
             music.play();
         } else {
-            std::cerr << "Erro: Nao foi possivel carregar " << musicFilePath << std::endl;
+            std::cerr << "Error: Could not load " << musicFilePath << std::endl;
         }
     }
 

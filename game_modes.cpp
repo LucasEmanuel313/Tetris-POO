@@ -101,15 +101,15 @@ void runMultiplayerClient(SOCKET sock) {
 
     auto showOpponentLeft2s = [&]() {
         menuClear();
-        std::cout << ">>> Oponente saiu. <<<\n";
+        std::cout << ">>> Opponent left. <<<\n";
         std::cout.flush();
         Sleep(2000);
     };
 
     auto showWaitingRematch = [&]() {
         menuClear();
-        std::cout << "Aguardando oponente aceitar outra partida...\n";
-        std::cout << "(q=cancelar)\n";
+        std::cout << "Waiting for opponent to accept rematch...\n";
+        std::cout << "(q=cancel)\n";
         std::cout.flush();
     };
 
@@ -238,7 +238,7 @@ void runMultiplayerClient(SOCKET sock) {
                     } else {
                         showWaitingRematch();
                     }
-                    std::cout << "\n>>> O oponente nao aceitou outra partida. <<<\n";
+                    std::cout << "\n>>> Opponent declined the rematch. <<<\n";
                     std::cout.flush();
                     Sleep(2000);
                 }
@@ -283,7 +283,7 @@ void runMultiplayerClient(SOCKET sock) {
                     renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
                 }
 
-                int choice = postGameChoiceWithTitle(">>> VOCE VENCEU | OPONENTE PERDEU <<<");
+                int choice = postGameChoiceWithTitle(">>> YOU WIN | OPPONENT LOSES <<<");
                 if (choice == 1) {
                     sendLine(sock, "REMATCH YES");
                     postGameWaiting = true;
@@ -298,7 +298,7 @@ void runMultiplayerClient(SOCKET sock) {
             }
             else if (line == "OPPONENT_LEFT") {
                 menuClear();
-                std::cout << ">>> Oponente saiu. <<<\n";
+                std::cout << ">>> Opponent left. <<<\n";
                 std::cout.flush();
 
                 // interrompe a partida imediatamente (não deixa o host continuar jogando)
@@ -318,7 +318,7 @@ void runMultiplayerClient(SOCKET sock) {
                 if (isHost) {
                     // host volta a esperar outro jogador
                     menuClear();
-                    std::cout << "Oponente saiu. Aguardando outro jogador... (press q to cancel)\n";
+                    std::cout << "Opponent left. Waiting for another player... (press q to cancel)\n";
                     std::cout.flush();
                 } else {
                     running = false;
@@ -431,7 +431,7 @@ void runMultiplayerClient(SOCKET sock) {
             menuClear();
             renderFrameMultiplayer(ta, opp, pendingIncomingGarbage);
 
-            int choice = postGameChoiceWithTitle(">>> VOCE PERDEU | OPONENTE VENCEU <<<");
+            int choice = postGameChoiceWithTitle(">>> YOU LOSE | OPPONENT WINS <<<");
             if (choice == 1) {
                 sendLine(sock, "REMATCH YES");
                 postGameWaiting = true;
