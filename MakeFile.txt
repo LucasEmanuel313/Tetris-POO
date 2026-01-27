@@ -1,7 +1,5 @@
 CXX      := g++
-CXXFLAGS := -std=c++17 -O2 -Wall -Wextra
-
-LDLIBS_CONSOLE := -lws2_32
+CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Iinclude
 
 # SFML (ajuste se necessário)
 SFML_DIR := C:/SFML-3.0.2
@@ -9,43 +7,49 @@ SFML_INC := -I$(SFML_DIR)/include
 SFML_LIBDIR := -L$(SFML_DIR)/lib
 LDLIBS_SFML := -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio -lws2_32
 
+LDFLAGS_DEBUG := -mconsole
+LDFLAGS_GAME := -mwindows
+
 BUILD_DIR := build
-BUILD_SFML_DIR := build_sfml
+BUILD_OBJ_DIR := $(BUILD_DIR)/obj
+EXE_GAME := bin/game.exe
+EXE_DEBUG := bin/debug.exe
 
-EXE_CONSOLE := game.exe
-EXE_SFML := sfml_game.exe
+SRC_SFML := \
+	src/main.cpp \
+	src/WindowManager.cpp \
+	src/Game.cpp \
+	src/Multiplayer.cpp \
+	src/table.cpp \
+	src/net_client.cpp \
+	src/server.cpp \
+	src/SinglePlayerState.cpp
 
-SRC_CONSOLE := main.cpp table.cpp console_ui.cpp net_client.cpp server.cpp game_modes.cpp
-SRC_SFML := main_sfml.cpp WindowManager.cpp SfmlGame.cpp SfmlMultiplayer.cpp table.cpp net_client.cpp server.cpp
+OBJ_SFML := $(addprefix $(BUILD_OBJ_DIR)/,$(notdir $(SRC_SFML:.cpp=.o)))
 
-OBJ_CONSOLE := $(addprefix $(BUILD_DIR)/,$(notdir $(SRC_CONSOLE:.cpp=.o)))
-OBJ_SFML := $(addprefix $(BUILD_SFML_DIR)/,$(notdir $(SRC_SFML:.cpp=.o)))
 
-.PHONY: all console sfml clean
+.PHONY: all game debug clean
 
-all: console sfml
+all: game debug
 
-console: $(EXE_CONSOLE)
+game: $(EXE_GAME)
 
-sfml: $(EXE_SFML)
+debug: $(EXE_DEBUG)
 
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
-$(BUILD_SFML_DIR):
-	@mkdir -p $(BUILD_SFML_DIR)
+$(BUILD_OBJ_DIR): | $(BUILD_DIR)
+	@mkdir -p $(BUILD_OBJ_DIR)
 
-$(EXE_CONSOLE): $(BUILD_DIR) $(OBJ_CONSOLE)
-	$(CXX) $(CXXFLAGS) $(OBJ_CONSOLE) -o $@ $(LDLIBS_CONSOLE)
+$(EXE_GAME): $(BUILD_OBJ_DIR) $(OBJ_SFML)
+	$(CXX) $(CXXFLAGS) $(OBJ_SFML) -o $@ $(LDFLAGS_GAME) $(SFML_LIBDIR) $(LDLIBS_SFML)
 
-$(EXE_SFML): $(BUILD_SFML_DIR) $(OBJ_SFML)
-	$(CXX) $(CXXFLAGS) $(OBJ_SFML) -o $@ $(SFML_LIBDIR) $(LDLIBS_SFML)
+$(EXE_DEBUG): $(BUILD_OBJ_DIR) $(OBJ_SFML)
+	$(CXX) $(CXXFLAGS) $(OBJ_SFML) -o $@ $(LDFLAGS_DEBUG) $(SFML_LIBDIR) $(LDLIBS_SFML)
 
-$(BUILD_DIR)/%.o: %.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD_SFML_DIR)/%.o: %.cpp | $(BUILD_SFML_DIR)
+$(BUILD_OBJ_DIR)/%.o: src/%.cpp | $(BUILD_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(SFML_INC) -c $< -o $@
 
 clean:
-	@rm -rf $(BUILD_DIR) $(BUILD_SFML_DIR) *.exe
+	@rm -rf $(BUILD_DIR) $(EXE_GAME) $(EXE_DEBUG)
