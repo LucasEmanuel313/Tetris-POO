@@ -37,7 +37,7 @@ void SfmlMultiplayer::startClient(const std::string& ip, int port, bool host) {
 
     SOCKET s = INVALID_SOCKET;
     if (!connectToServer(ip, port, s)) {
-        setStatus("Falha ao conectar.");
+        setStatus("Failed to connect.");
         return;
     }
 
@@ -55,7 +55,7 @@ void SfmlMultiplayer::startClient(const std::string& ip, int port, bool host) {
     lastFall = clock::now();
     mode = Mode::Waiting;
     menuPane = MenuPane::Root;
-    setStatus("Conectado. Aguardando oponente...");
+    setStatus("Connected. Waiting for opponent...");
 }
 
 void SfmlMultiplayer::processLine(const std::string& line) {
@@ -68,7 +68,7 @@ void SfmlMultiplayer::processLine(const std::string& line) {
         opp.hasBoard = false;
         ta.reset(false);
         mode = Mode::Waiting;
-        setStatus("Aguardando oponente...");
+        setStatus("Waiting for opponent...");
         return;
     }
     if (line == "ROLE HOST") { isHost = true; return; }
@@ -88,12 +88,12 @@ void SfmlMultiplayer::processLine(const std::string& line) {
 
         sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
         mode = Mode::Playing;
-        setStatus("Partida iniciada!");
+        setStatus("Match started!");
         return;
     }
 
     if (line == "REMATCH_ABORT") {
-        setStatus("O oponente nao aceitou revanche.");
+        setStatus("Opponent declined the rematch.");
         mode = Mode::Menu;
         running = false;
         return;
@@ -129,12 +129,12 @@ void SfmlMultiplayer::processLine(const std::string& line) {
 
     if (line == "YOU_WIN") {
         mode = Mode::PostGame;
-        setStatus("VOCE VENCEU");
+        setStatus("YOU WIN");
         return;
     }
 
     if (line == "OPPONENT_LEFT") {
-        setStatus("Oponente saiu.");
+        setStatus("Opponent left.");
         mode = Mode::Menu;
         running = false;
         return;
@@ -199,11 +199,11 @@ SfmlMultiplayer::SfmlMultiplayer(const sf::Font& font, sf::RenderWindow& window)
 
     title.setString("Multiplayer");
     title.setCharacterSize(28);
-    title.setFillColor(sf::Color::Black);
+    title.setFillColor(sf::Color::White);
     title.setPosition({500.f, 160.f});
 
     hint.setCharacterSize(18);
-    hint.setFillColor(sf::Color::Black);
+    hint.setFillColor(sf::Color::White);
     hint.setPosition({420.f, 700.f});
 
     ipField.setAllowDot(true);
@@ -214,7 +214,7 @@ SfmlMultiplayer::SfmlMultiplayer(const sf::Font& font, sf::RenderWindow& window)
     portField.setMaxLen(5);
     portField.setValue("5555");
 
-    setStatus("Escolha Host ou Join");
+    setStatus("Choose Host or Join");
 }
 
 void SfmlMultiplayer::onEnter() {
@@ -240,7 +240,7 @@ void SfmlMultiplayer::handleEvent(const sf::Event& ev, sf::RenderWindow& window)
         if (kp->code == sf::Keyboard::Key::Escape) {
             if (mode == Mode::Menu && menuPane != MenuPane::Root) {
                 menuPane = MenuPane::Root;
-                setStatus("Escolha Host ou Join");
+                setStatus("Choose Host or Join");
                 return;
             }
             // sai do multiplayer
@@ -257,7 +257,7 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
         closeSock();
         stopHosting();
         mode = Mode::Menu;
-        setStatus("Desconectado.");
+        setStatus("Disconnected.");
     }
 
     // logic: playing
@@ -304,7 +304,7 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
             sentGameOver = true;
             sendLine(sock, "BOARD " + std::to_string(ta.get_score()) + " " + ta.serialize_board());
             mode = Mode::PostGame;
-            setStatus("VOCE PERDEU");
+            setStatus("YOU LOSE");
         }
     }
 
@@ -328,13 +328,13 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
                 } else {
                     hosting = true;
                     startClient("127.0.0.1", port, true);
-                    setStatus("Sala criada. Aguardando oponente...");
+                    setStatus("Room created. Waiting for opponent...");
                 }
             }
 
             if (joinBtn.getOnRelease()) {
                 menuPane = MenuPane::JoinForm;
-                setStatus("Digite IP e porta, depois Connect.");
+                setStatus("Enter IP and port, then click Connect.");
             }
 
             if (backBtn.getOnRelease()) {
@@ -352,7 +352,7 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
 
             if (backBtn.getOnRelease()) {
                 menuPane = MenuPane::Root;
-                setStatus("Escolha Host ou Join");
+                setStatus("Choose Host or Join");
             }
         }
     }
@@ -365,7 +365,7 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
             sendLine(sock, "REMATCH YES");
             postGameWaiting = true;
             mode = Mode::Waiting;
-            setStatus("Aguardando oponente aceitar revanche...");
+            setStatus("Waiting for opponent to accept rematch...");
         }
         if (leaveBtn.getOnRelease()) {
             sendLine(sock, "LEAVE");
@@ -377,9 +377,12 @@ bool SfmlMultiplayer::update(Mouse& mouse) {
 }
 
 void SfmlMultiplayer::draw(sf::RenderWindow& window) {
+    const sf::Color kHudBg(0, 0, 0, 210);
+    const sf::Color kHudOutline(255, 255, 255, 230);
+
     if (mode == Mode::Menu) {
         applyMenuLayout();
-        drawTextWithBox(window, title);
+        drawTextWithBox(window, title, 10.f, kHudBg, kHudOutline, 2.f);
 
         if (menuPane == MenuPane::Root) {
             hostBtn.draw(window);
@@ -389,16 +392,16 @@ void SfmlMultiplayer::draw(sf::RenderWindow& window) {
             sf::Text ipLabel(title);
             ipLabel.setString("IP:");
             ipLabel.setCharacterSize(18);
-            ipLabel.setFillColor(sf::Color::Black);
-            ipLabel.setPosition({420.f, 255.f});
-            drawTextWithBox(window, ipLabel);
+                ipLabel.setFillColor(sf::Color::White);
+            ipLabel.setPosition({380.f, 255.f});
+                drawTextWithBox(window, ipLabel, 6.f, kHudBg, kHudOutline, 2.f);
 
             sf::Text portLabel(title);
             portLabel.setString("Port:");
             portLabel.setCharacterSize(18);
-            portLabel.setFillColor(sf::Color::Black);
-            portLabel.setPosition({420.f, 315.f});
-            drawTextWithBox(window, portLabel);
+                portLabel.setFillColor(sf::Color::White);
+            portLabel.setPosition({380.f, 315.f});
+                drawTextWithBox(window, portLabel, 6.f, kHudBg, kHudOutline, 2.f);
 
             ipField.draw(window);
             portField.draw(window);
@@ -409,19 +412,21 @@ void SfmlMultiplayer::draw(sf::RenderWindow& window) {
     }
     else if (mode == Mode::Waiting) {
         sf::Text t(title);
-        t.setFillColor(sf::Color::Black);
+        t.setFillColor(sf::Color::White);
         t.setString(statusLine);
-        t.setCharacterSize(24);
-        t.setPosition({300.f, 160.f});
-        drawTextWithBox(window, t, 10.f);
+        t.setCharacterSize(30);
+        wrapTextToWidth(t, 1040.f);
+        t.setPosition({80.f, 160.f});
+        drawTextWithBox(window, t, 12.f, kHudBg, kHudOutline, 2.f);
 
         if (isHost && sessionPort > 0) {
             sf::Text info(title);
-            info.setFillColor(sf::Color::Black);
-            info.setCharacterSize(18);
-            info.setString("Host ativo. Peca o oponente para entrar em: IP do host na rede, porta " + std::to_string(sessionPort));
-            info.setPosition({220.f, 220.f});
-            drawTextWithBox(window, info, 10.f);
+            info.setFillColor(sf::Color::White);
+            info.setCharacterSize(22);
+            info.setString("Host is running. Ask your opponent to join using the host IP on the network, port " + std::to_string(sessionPort));
+            wrapTextToWidth(info, 1040.f);
+            info.setPosition({80.f, 230.f});
+            drawTextWithBox(window, info, 12.f, kHudBg, kHudOutline, 2.f);
         }
     }
     else if (mode == Mode::Playing) {
@@ -432,8 +437,8 @@ void SfmlMultiplayer::draw(sf::RenderWindow& window) {
         g.setString("Garbage: +" + std::to_string(pendingIncomingGarbage));
         g.setCharacterSize(16);
         g.setPosition({SfmlGame::PANEL_POS_X, SfmlGame::GRID_POS_Y + 700.f});
-        g.setFillColor(sf::Color::Black);
-        drawTextWithBox(window, g);
+        g.setFillColor(sf::Color::White);
+        drawTextWithBox(window, g, 8.f, kHudBg, kHudOutline, 2.f);
     }
     else if (mode == Mode::PostGame) {
         oppRenderer.draw(window, opp);
@@ -447,14 +452,15 @@ void SfmlMultiplayer::draw(sf::RenderWindow& window) {
         sf::Text msg(title);
         msg.setString(statusLine);
         msg.setCharacterSize(28);
-        msg.setFillColor(sf::Color::Black);
+        msg.setFillColor(sf::Color::White);
         msg.setPosition({450.f, 420.f});
-        drawTextWithBox(window, msg, 12.f);
+        drawTextWithBox(window, msg, 14.f, kHudBg, kHudOutline, 2.f);
 
         rematchBtn.draw(window);
         leaveBtn.draw(window);
     }
 
-    hint.setFillColor(sf::Color::Black);
-    drawTextWithBox(window, hint);
+    hint.setFillColor(sf::Color::White);
+    hint.setCharacterSize(20);
+    drawTextWithBox(window, hint, 10.f, kHudBg, kHudOutline, 2.f);
 }

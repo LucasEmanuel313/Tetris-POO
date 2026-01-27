@@ -11,7 +11,8 @@ public:
     sf::Vector2f position;
 
     void Update(sf::RenderWindow& window) {
-        position = sf::Vector2f(sf::Mouse::getPosition(window));
+        const sf::Vector2i pixelPos = sf::Mouse::getPosition(window);
+        position = window.mapPixelToCoords(pixelPos);
 
         onPress = false;
         onRelease = false;

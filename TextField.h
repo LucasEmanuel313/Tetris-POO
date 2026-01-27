@@ -43,7 +43,8 @@ public:
 
     void handleEvent(const sf::Event& ev, const sf::RenderWindow& window) {
         if (const auto* mb = ev.getIf<sf::Event::MouseButtonPressed>()) {
-            sf::Vector2f mouse = sf::Vector2f(sf::Mouse::getPosition(window));
+            const sf::Vector2i pixelPos = mb->position;
+            sf::Vector2f mouse = window.mapPixelToCoords(pixelPos);
             focused = box.getGlobalBounds().contains(mouse);
             box.setOutlineColor(focused ? sf::Color(30, 120, 255) : sf::Color::Black);
         }

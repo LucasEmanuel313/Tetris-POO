@@ -76,7 +76,7 @@ static void drainKb() {
 bool confirmLeaveToMenu() {
     drainKb();
     menuClear();
-    std::cout << "Sair para o menu? (Y/N) ";
+    std::cout << "Return to menu? (Y/N) ";
     std::cout.flush();
     while (true) {
         char c = _getch();
@@ -89,8 +89,8 @@ bool confirmLeaveToMenu() {
 // Não limpa a tela: use após renderizar o(s) tabuleiro(s)
 static int postGameChoiceInline() {
     drainKb();
-    std::cout << "1) Jogar outra partida\n";
-    std::cout << "2) Voltar ao menu\n";
+    std::cout << "1) Play again\n";
+    std::cout << "2) Back to menu\n";
     std::cout << "> ";
     std::cout.flush();
     while (true) {
@@ -161,9 +161,9 @@ void renderFrameMultiplayer(const table& local, const OpponentState& opp, int pe
     const std::string& op = opp.hasBoard ? opp.data : kEmptyBoard;
 
     // títulos
-    std::cout << "   VOCE";
+    std::cout << "   YOU";
     std::cout << "                          ";
-    std::cout << "OPONENTE";
+    std::cout << "OPPONENT";
     std::cout << "\n\n";
 
     // 22 linhas do tabuleiro (imprime de cima para baixo)

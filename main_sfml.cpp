@@ -25,6 +25,39 @@ static bool tryLoadTexture(sf::Texture& tex) {
     return tex.loadFromFile("Images/Background_Tetris.jpg") || tex.loadFromFile("tomerge/Images/Background_Tetris.jpg");
 }
 
+static void applyLetterboxView(sf::RenderWindow& window, float baseWidth, float baseHeight) {
+    sf::View view;
+    view.setSize({baseWidth, baseHeight});
+    view.setCenter({baseWidth / 2.f, baseHeight / 2.f});
+
+    const sf::Vector2u winSize = window.getSize();
+    if (winSize.x == 0 || winSize.y == 0) {
+        window.setView(view);
+        return;
+    }
+
+    const float windowAspect = (float)winSize.x / (float)winSize.y;
+    const float viewAspect = baseWidth / baseHeight;
+
+    float viewportWidth = 1.f;
+    float viewportHeight = 1.f;
+    float viewportLeft = 0.f;
+    float viewportTop = 0.f;
+
+    if (windowAspect > viewAspect) {
+        // window is wider -> pillarbox
+        viewportWidth = viewAspect / windowAspect;
+        viewportLeft = (1.f - viewportWidth) / 2.f;
+    } else if (windowAspect < viewAspect) {
+        // window is taller -> letterbox
+        viewportHeight = windowAspect / viewAspect;
+        viewportTop = (1.f - viewportHeight) / 2.f;
+    }
+
+    view.setViewport({{viewportLeft, viewportTop}, {viewportWidth, viewportHeight}});
+    window.setView(view);
+}
+
 
 void changeFallInterval(std::chrono::milliseconds& fallInterval, int score) {
     int level = score / 100;
@@ -45,6 +78,8 @@ int main() {
 
     WindowManager windowManager;
     sf::RenderWindow& window = windowManager.getWindow();
+
+    applyLetterboxView(window, 1200.f, 800.f);
 
     GameState current_state = GameState::MENU;
     bool exitRequested = false;
@@ -80,6 +115,11 @@ int main() {
         while (auto event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) {
                 window.close();
+            }
+
+            if (const auto* resized = event->getIf<sf::Event::Resized>()) {
+                (void)resized;
+                applyLetterboxView(window, 1200.f, 800.f);
             }
 
             if (current_state == GameState::MULTIPLAYER) {

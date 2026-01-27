@@ -2,12 +2,14 @@
 #include <cstdlib> // Para rand() e srand()
 #include <ctime>   // Para time()
 #include <iostream>
+#include <memory>
+#include <stdexcept>
 
 
 #ifndef BLOCK_H
 #define BLOCK_H
 
-const char PIECE_I[4][4] = {
+inline constexpr char PIECE_I[4][4] = {
     {' ', ' ', ' ', ' '},
     {'#', '#', '#', '#'}, // Quatro blocos em linha
     {' ', ' ', ' ', ' '},
@@ -15,7 +17,7 @@ const char PIECE_I[4][4] = {
 };
 
 // Peça J (Jota)
-const char PIECE_J[4][4] = {
+inline constexpr char PIECE_J[4][4] = {
     {' ', ' ', ' ', ' '},
     {'#', '#', '#', ' '},
     {' ', ' ', '#', ' '}, // O 'canto' no topo direito
@@ -23,7 +25,7 @@ const char PIECE_J[4][4] = {
 };
 
 // Peça L (Éle)
-const char PIECE_L[4][4] = {
+inline constexpr char PIECE_L[4][4] = {
     {' ', ' ', ' ', ' '},
     {'#', '#', '#', ' '},
     {'#', ' ', ' ', ' '}, // O 'canto' no topo esquerdo
@@ -31,7 +33,7 @@ const char PIECE_L[4][4] = {
 };
 
 // Peça O (Quadrado)
-const char PIECE_O[4][4] = {
+inline constexpr char PIECE_O[4][4] = {
     {' ', ' ', ' ', ' '},
     {' ', '#', '#', ' '},
     {' ', '#', '#', ' '}, // 2x2 centralizado
@@ -39,7 +41,7 @@ const char PIECE_O[4][4] = {
 };
 
 // Peça S (Ese)
-const char PIECE_S[4][4] = {
+inline constexpr char PIECE_S[4][4] = {
     {' ', ' ', ' ', ' '},
     {' ', '#', '#', ' '},
     {'#', '#', ' ', ' '}, // Forma de Z (ou S)
@@ -47,7 +49,7 @@ const char PIECE_S[4][4] = {
 };
 
 // Peça T (Tê)
-const char PIECE_T[4][4] = {
+inline constexpr char PIECE_T[4][4] = {
     {' ', ' ', ' ', ' '},
     {'#', '#', '#', ' '},
     {' ', '#', ' ', ' '}, // Bloco extra no meio
@@ -55,14 +57,14 @@ const char PIECE_T[4][4] = {
 };
 
 // Peça Z (Zeta)
-const char PIECE_Z[4][4] = {
+inline constexpr char PIECE_Z[4][4] = {
     {' ', ' ', ' ', ' '},
     {'#', '#', ' ', ' '},
     {' ', '#', '#', ' '}, // Forma de S (ou Z)
     {' ', ' ', ' ', ' '}
 };
 
-static const char (*TETROMINOES[])[4][4] = {
+inline constexpr const char (*TETROMINOES[])[4][4] = {
     &PIECE_I,
     &PIECE_J,
     &PIECE_L,
@@ -71,12 +73,48 @@ static const char (*TETROMINOES[])[4][4] = {
     &PIECE_T,
     &PIECE_Z
 };
+
+inline constexpr int kTetrominoTypeCount = 7;
+
+template<int Type>
+inline constexpr const char (&tetromino_shape())[4][4];
+
+template<>
+inline constexpr const char (&tetromino_shape<0>())[4][4] { return PIECE_I; }
+template<>
+inline constexpr const char (&tetromino_shape<1>())[4][4] { return PIECE_J; }
+template<>
+inline constexpr const char (&tetromino_shape<2>())[4][4] { return PIECE_L; }
+template<>
+inline constexpr const char (&tetromino_shape<3>())[4][4] { return PIECE_O; }
+template<>
+inline constexpr const char (&tetromino_shape<4>())[4][4] { return PIECE_S; }
+template<>
+inline constexpr const char (&tetromino_shape<5>())[4][4] { return PIECE_T; }
+template<>
+inline constexpr const char (&tetromino_shape<6>())[4][4] { return PIECE_Z; }
+
+inline constexpr const char (&tetromino_shape_by_type(int type))[4][4] {
+    switch (type) {
+        case 0: return PIECE_I;
+        case 1: return PIECE_J;
+        case 2: return PIECE_L;
+        case 3: return PIECE_O;
+        case 4: return PIECE_S;
+        case 5: return PIECE_T;
+        case 6: return PIECE_Z;
+        default: throw std::out_of_range("Invalid tetromino type");
+    }
+}
+
 class block {
     protected:
         int type_ = 0;
     public:
         char piece[4][4];
         int profile[4];
+
+        virtual ~block() = default;
         void make_profile() {
     // Itera por COLUNAS (i)
     for (int i = 0; i < 4; i++) {
@@ -104,7 +142,7 @@ class block {
         std::cout << "Block: Column " << i << " lowest block found at row: " << profile[i] << std::endl;
     }
 }
-        void rotate(){
+        virtual void rotate(){
             char temp[4][4];
             for (size_t i = 0; i < 4; i++) {
                 for (size_t j = 0; j < 4; j++) {
@@ -129,10 +167,12 @@ class block {
 
         // Constrói um tetromino específico (0..6)
         block(int tetrominoIndex){
+            // Mantém compatibilidade com o código antigo: se vier inválido,
+            // vamos normalizar (sem lançar) para não quebrar o jogo.
             if (tetrominoIndex < 0) tetrominoIndex = 0;
-            if (tetrominoIndex > 6) tetrominoIndex = 6;
+            if (tetrominoIndex >= kTetrominoTypeCount) tetrominoIndex = kTetrominoTypeCount - 1;
             type_ = tetrominoIndex;
-            const char (*selected_piece)[4][4] = TETROMINOES[tetrominoIndex];
+            const char (*selected_piece)[4][4] = TETROMINOES[type_];
             for (size_t i = 0; i < 4; i++) {
                 for (size_t j = 0; j < 4; j++) {
                     piece[i][j] = (*selected_piece)[i][j];
@@ -156,6 +196,45 @@ class block {
             }
         }
 };
+
+// --- Herança: cada tetromino é um tipo derivado ---
+template<int Type>
+class TetrominoBlock : public block {
+public:
+    TetrominoBlock() : block(tetromino_shape<Type>()) {
+        static_assert(Type >= 0 && Type < kTetrominoTypeCount, "Invalid tetromino Type");
+        type_ = Type;
+    }
+};
+
+// Exemplo de especialização via herança: O não muda ao rotacionar.
+template<>
+class TetrominoBlock<3> : public block {
+public:
+    TetrominoBlock() : block(PIECE_O) { type_ = 3; }
+    void rotate() override {}
+};
+
+using IBlock = TetrominoBlock<0>;
+using JBlock = TetrominoBlock<1>;
+using LBlock = TetrominoBlock<2>;
+using OBlock = TetrominoBlock<3>;
+using SBlock = TetrominoBlock<4>;
+using TBlock = TetrominoBlock<5>;
+using ZBlock = TetrominoBlock<6>;
+
+inline std::unique_ptr<block> make_block(int type) {
+    switch (type) {
+        case 0: return std::make_unique<IBlock>();
+        case 1: return std::make_unique<JBlock>();
+        case 2: return std::make_unique<LBlock>();
+        case 3: return std::make_unique<OBlock>();
+        case 4: return std::make_unique<SBlock>();
+        case 5: return std::make_unique<TBlock>();
+        case 6: return std::make_unique<ZBlock>();
+        default: throw std::out_of_range("Invalid tetromino type");
+    }
+}
 
 
 
