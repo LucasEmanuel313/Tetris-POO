@@ -83,6 +83,7 @@ class SfmlMultiplayer {
 public:
     enum class Mode {
         Menu,
+        Connecting,
         Waiting,
         Playing,
         PostGame
@@ -99,6 +100,7 @@ private:
     Button joinBtn;
     Button backBtn;
     Button connectBtn;
+    Button cancelConnectBtn;
 
     TextField ipField;
     TextField portField;
@@ -110,6 +112,8 @@ private:
     ServerHandle server;
     bool hosting = false;
     SOCKET sock = INVALID_SOCKET;
+
+    bool backToMainMenuRequested = false;
 
     std::string sessionIp;
     int sessionPort = 0;
@@ -136,12 +140,17 @@ private:
     clock::time_point lastFall;
     std::chrono::milliseconds fallInterval{500};
 
+    clock::time_point connectStart;
+    std::chrono::milliseconds connectTimeout{5000};
+
     Mode mode = Mode::Menu;
     std::string statusLine;
 
     MenuPane menuPane = MenuPane::Root;
 
     int enterCooldownFrames = 0;
+
+    bool pauseConfirmActive = false;
 
     // post game
     Button rematchBtn;
@@ -152,6 +161,9 @@ private:
     void setStatus(const std::string& s);
     void applyMenuLayout();
     void startClient(const std::string& ip, int port, bool host);
+    void beginConnect(const std::string& ip, int port, bool host);
+    bool pollConnect(bool& outConnected, std::string& outError);
+    void startSessionAfterConnect();
     void processLine(const std::string& line);
     void pumpNetwork();
 
